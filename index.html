@@ -108,7 +108,7 @@
     display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:18px;
     background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px 14px;
   }
-  .search-wrap{position:relative; flex:1; min-width:180px;}
+  .search-wrap{position:relative; flex:0 1 220px; min-width:140px;}
   .search-wrap input{
     width:100%; background:rgba(var(--paper-tone),.05); border:1px solid var(--line); border-radius:10px;
     padding:12px 12px 12px 38px; color:var(--fg); font-family:var(--font-body); font-size:15px; outline:none;
@@ -127,7 +127,11 @@
 
   /* ---------- table (manifest ledger) ---------- */
   .manifest{margin-top:18px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow);}
-  .m-head, .m-row{display:grid; grid-template-columns: 1.15fr 1.3fr 1.1fr .8fr .8fr 1.3fr .9fr 90px; gap:10px; align-items:center; padding:15px 18px;}
+  .rows-scroll{overflow-y:auto; scroll-behavior:smooth; transition:max-height .3s ease;}
+  .rows-scroll::-webkit-scrollbar{width:9px;}
+  .rows-scroll::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
+  .rows-scroll::-webkit-scrollbar-thumb:hover{background:var(--signal);}
+  .m-head, .m-row{display:grid; grid-template-columns: 1.15fr 1.3fr 1.1fr .8fr .8fr 1.3fr .9fr 44px 116px; gap:10px; align-items:center; padding:15px 18px;}
   .app.device-mobile .m-head{display:none;}
   .m-head{font-family:var(--font-mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--fg-muted); border-bottom:1px solid var(--line);}
   .m-row{border-bottom:1px dashed var(--line); position:relative; transition:background .25s ease, transform .25s ease;}
@@ -143,21 +147,41 @@
   .badge{display:inline-flex; align-items:center; gap:5px; font-size:13px; font-weight:700; padding:6px 12px; border-radius:999px; font-family:var(--font-body);}
   .badge.type-reg{background:rgba(45,217,181,.14); color:var(--signal);}
   .badge.type-pkg{background:rgba(255,178,56,.16); color:var(--amber);}
-  .badge.own-personal{background:rgba(255,255,255,.08); color:var(--fg-muted); border:1px solid var(--line);}
-  .badge.own-company{background:rgba(255,255,255,.08); color:var(--fg-muted); border:1px solid var(--line);}
+  .badge.owner-badge{background:rgba(255,255,255,.08); color:var(--fg-muted); border:1px solid var(--line);}
   .status-pill{display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; padding:6px 12px; border-radius:999px;}
   .status-pill.pending{background:rgba(255,178,56,.16); color:var(--amber);}
   .status-pill.done{background:rgba(45,217,181,.14); color:var(--signal);}
   .status-pill.overdue{background:rgba(255,84,112,.16); color:var(--danger); animation:pulse 2s ease-in-out infinite;}
   @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.55;}}
   .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
-  .row-actions{display:flex; gap:8px; justify-content:flex-end;}
+  .row-actions{display:flex; gap:8px; justify-content:flex-end; align-items:center;}
+  .row-check{width:19px; height:19px; accent-color:var(--signal); cursor:pointer; flex:none;}
+  .lock-badge{
+    width:30px; height:30px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+    color:var(--fg-muted); opacity:.55; flex:none; cursor:not-allowed;
+  }
+  .lock-badge svg{width:15px;height:15px;}
+  .bulk-bar{
+    display:flex; align-items:center; gap:14px; padding-left:14px; margin-left:auto;
+    border-left:1px solid var(--line); animation:fadeIn .25s ease; flex:none;
+  }
+  .bulk-select-all{display:flex; align-items:center; gap:7px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; white-space:nowrap;}
+  .bulk-select-all input{width:18px; height:18px; accent-color:var(--signal); cursor:pointer;}
+  .bulk-count{font-size:12px; color:var(--fg-muted); font-family:var(--font-mono); white-space:nowrap;}
+  .bulk-delete-btn:disabled{opacity:.35; cursor:not-allowed; transform:none !important; border-color:var(--line) !important; color:var(--fg-muted) !important;}
+  .bulk-delete-btn:not(:disabled):hover{border-color:var(--danger); color:var(--danger);}
   .mini-btn{width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:transparent; color:var(--fg-muted); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; transition:all .2s ease;}
   .mini-btn:hover{color:var(--signal); border-color:var(--signal); transform:translateY(-2px) rotate(-4deg);}
   .mini-btn.del:hover{color:var(--danger); border-color:var(--danger);}
   .mini-btn svg{width:15px;height:15px;}
   .empty-state{padding:60px 20px; text-align:center; color:var(--fg-muted); font-size:15px;}
   .empty-state .stub{width:64px;height:64px;margin:0 auto 14px; opacity:.5;}
+  .creator-chip{
+    width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-body); font-weight:800; font-size:17px; flex:none; box-shadow:0 4px 12px -4px rgba(0,0,0,.35);
+  }
+  .creator-chip.c-dai{background:var(--signal); color:#04231C;}
+  .creator-chip.c-ban{background:var(--amber); color:#3A2200;}
 
   /* inline-editable fields (admin mode) */
   .inline-input, .inline-select{
@@ -191,7 +215,7 @@
   .mrow-pick .inline-date{font-size:11.5px; padding:3px 5px;}
   .mrow-line3{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; padding-top:2px; border-top:1px dashed var(--line);}
   .mrow-tags{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
-  .mrow-pick{font-family:var(--font-mono); font-size:11.5px; color:var(--fg-muted); white-space:nowrap;}
+  .mrow-pick{font-family:var(--font-mono); font-size:11.5px; color:var(--fg-muted); white-space:nowrap; text-align:right;}
   .app.device-mobile .row-actions{justify-content:flex-end;}
   .app.device-mobile .mini-btn{width:34px; height:34px; border-radius:9px;}
   .app.device-mobile .badge, .app.device-mobile .status-pill{font-size:11.5px; padding:4px 9px;}
@@ -261,8 +285,6 @@
   .toast.error{border-color:var(--danger); color:var(--danger);}
   @keyframes toastIn{from{transform:translateY(20px); opacity:0;} to{transform:translateY(0); opacity:1;}}
 
-  .view-badge{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.1em; padding:4px 10px; border-radius:999px; border:1px solid var(--line); color:var(--fg-muted);}
-  .view-badge.admin{border-color:var(--amber); color:var(--amber);}
 
   ::-webkit-scrollbar{width:8px; height:8px;}
   ::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
@@ -287,7 +309,6 @@
         </div>
       </div>
       <div class="topbar-controls">
-        <span class="view-badge" id="viewBadge">檢視模式</span>
         <button class="icon-btn" id="deviceToggle" title="切換裝置尺寸">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           電腦
@@ -313,7 +334,7 @@
     <div class="toolbar">
       <div class="search-wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-        <input type="text" id="searchInput" placeholder="搜尋編號 / 公司 / 收件人…">
+        <input type="text" id="searchInput" placeholder="搜尋…">
       </div>
       <select class="filter" id="filterType">
         <option value="">全部類型</option>
@@ -333,13 +354,30 @@
         <option value="pending">待領取</option>
         <option value="done">已領取</option>
       </select>
+      <select class="filter" id="pageSizeSelect" title="一次顯示幾筆">
+        <option value="6">顯示 6 筆</option>
+        <option value="8">顯示 8 筆</option>
+        <option value="10" selected>顯示 10 筆</option>
+        <option value="15">顯示 15 筆</option>
+        <option value="20">顯示 20 筆</option>
+        <option value="all">顯示全部</option>
+      </select>
+      <div class="bulk-bar" id="bulkBar" style="display:none">
+        <label class="bulk-select-all">
+          <input type="checkbox" id="selectAllCheckbox"><span>全選</span>
+        </label>
+        <span class="bulk-count" id="bulkCount">已選 0 筆</span>
+        <button class="mini-btn del bulk-delete-btn" id="bulkDeleteBtn" disabled title="刪除已選取">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+        </button>
+      </div>
     </div>
 
     <div class="manifest" id="manifest">
       <div class="m-head">
-        <div>東西編號</div><div>寄件公司</div><div>收件人</div><div>類型</div><div>性質</div><div>領取時間</div><div>狀態</div><div></div>
+        <div>東西編號</div><div>寄件公司</div><div>收件人</div><div>類型</div><div>性質</div><div>領取時間</div><div>狀態</div><div>人員</div><div></div>
       </div>
-      <div id="rows"></div>
+      <div id="rows" class="rows-scroll"></div>
     </div>
 
     <div class="fab-row">
@@ -382,7 +420,7 @@
       </div>
       <div class="field">
         <label>性質</label>
-        <select id="f_owner"><option value="私人">私人</option><option value="公司">公司</option></select>
+        <select id="f_owner"><option value="私人">私人</option><option value="大量">大量</option><option value="生技">生技</option><option value="先進智能">先進智能</option><option value="哈伯西">哈伯西</option></select>
       </div>
     </div>
     <div class="field">
@@ -430,7 +468,7 @@
 
 <script>
 (function(){
-  const state = { items: [], theme: 'dark', device: 'desktop', isAdmin: false, editingId: null, pin: '' };
+  const state = { items: [], theme: 'dark', device: 'desktop', isAdmin: false, adminName: null, editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [] };
 
   // ---------- persistence ----------
   const STORE_KEY = 'mailroom:items';
@@ -481,22 +519,22 @@
       : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>手機');
   }
   document.getElementById('deviceToggle').addEventListener('click', ()=>{
-    state.device = state.device === 'desktop' ? 'mobile' : 'desktop'; applyDevice();
+    state.device = state.device === 'desktop' ? 'mobile' : 'desktop'; applyDevice(); render();
   });
 
   // ---------- admin ----------
-  const ADMIN_PIN = '258';
+  const ADMIN_ACCOUNTS = { '258': '小戴', '000': '代班' };
   function updateAdminUI(){
-    document.getElementById('viewBadge').textContent = state.isAdmin ? '管理員模式' : '檢視模式';
-    document.getElementById('viewBadge').classList.toggle('admin', state.isAdmin);
     document.getElementById('adminBtn').innerHTML = state.isAdmin
-      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>管理員已登入'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>' + state.adminName + ' 已登入'
       : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>管理員登入';
     document.getElementById('adminBtn').classList.toggle('on', state.isAdmin);
+    document.getElementById('bulkBar').style.display = state.isAdmin ? 'flex' : 'none';
+    if(!state.isAdmin) state.selectedIds.clear();
     render();
   }
   document.getElementById('adminBtn').addEventListener('click', ()=>{
-    if(state.isAdmin){ state.isAdmin = false; updateAdminUI(); toast('已登出管理員模式'); return; }
+    if(state.isAdmin){ state.isAdmin = false; state.adminName = null; updateAdminUI(); toast('已登出管理員模式'); return; }
     openOverlay('loginOverlay');
   });
   function renderPin(){
@@ -507,13 +545,15 @@
     const btn = e.target.closest('button'); if(!btn) return;
     const k = btn.dataset.k;
     if(k === 'back'){ state.pin = state.pin.slice(0,-1); renderPin(); return; }
-    if(k === 'logout'){ state.isAdmin = false; state.pin=''; renderPin(); updateAdminUI(); closeOverlay('loginOverlay'); toast('已登出'); return; }
+    if(k === 'logout'){ state.isAdmin = false; state.adminName = null; state.pin=''; renderPin(); updateAdminUI(); closeOverlay('loginOverlay'); toast('已登出'); return; }
     if(state.pin.length >= 3) return;
     state.pin += k; renderPin();
     if(state.pin.length === 3){
       setTimeout(()=>{
-        if(state.pin === ADMIN_PIN){
-          state.isAdmin = true; closeOverlay('loginOverlay'); updateAdminUI(); toast('管理員登入成功', 'success');
+        const matchedName = ADMIN_ACCOUNTS[state.pin];
+        if(matchedName){
+          state.isAdmin = true; state.adminName = matchedName;
+          closeOverlay('loginOverlay'); updateAdminUI(); toast(matchedName + ' 登入成功', 'success');
         } else {
           toast('密碼錯誤', 'error');
         }
@@ -538,6 +578,12 @@
     if(item.indate && daysBetween(item.indate) > 3) return 'overdue';
     return 'pending';
   }
+  function canModify(item){
+    if(!state.isAdmin) return false;
+    if(state.adminName === '小戴') return true;
+    if(state.adminName === '代班') return item.creator === '代班';
+    return false;
+  }
   function render(){
     const q = document.getElementById('searchInput').value.trim().toLowerCase();
     const fType = document.getElementById('filterType').value;
@@ -557,9 +603,8 @@
     if(list.length === 0){
       rows.innerHTML = '<div class="empty-state"><svg class="stub" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M8 6V4h8v2"/></svg><div>目前沒有符合條件的登記紀錄</div></div>';
     } else {
-      const admin = state.isAdmin;
       const tpl = state.device === 'mobile' ? rowTemplateMobile : rowTemplateDesktop;
-      rows.innerHTML = list.map(it => tpl(it, admin)).join('');
+      rows.innerHTML = list.map(it => tpl(it, canModify(it))).join('');
     }
 
     // stats
@@ -568,10 +613,93 @@
     document.getElementById('statOverdue').textContent = state.items.filter(it=>computeStatus(it)==='overdue').length;
     document.getElementById('statToday').textContent = state.items.filter(it=>it.indate === todayStr()).length;
 
+    state.lastFilteredIds = list.map(it=>it.id);
+    state.lastSelectableIds = list.filter(it=>canModify(it)).map(it=>it.id);
+
     rows.querySelectorAll('.del').forEach(btn=>{
       btn.addEventListener('click', (e)=>{ e.stopPropagation(); removeItem(btn.closest('.m-row').dataset.id); });
     });
+    rows.querySelectorAll('.row-check').forEach(cb=>{
+      cb.addEventListener('change', (e)=>{
+        const id = e.target.dataset.id;
+        if(e.target.checked) state.selectedIds.add(id); else state.selectedIds.delete(id);
+        updateBulkBar();
+      });
+    });
+    updateBulkBar();
+
+    requestAnimationFrame(adjustRowsHeight);
   }
+
+  function updateBulkBar(){
+    const count = state.selectedIds.size;
+    document.getElementById('bulkCount').textContent = '已選取 ' + count + ' 筆';
+    document.getElementById('bulkDeleteBtn').disabled = count === 0;
+    const selectAll = document.getElementById('selectAllCheckbox');
+    const selectableIds = state.lastSelectableIds || [];
+    const selectedVisibleCount = selectableIds.filter(id=>state.selectedIds.has(id)).length;
+    if(selectableIds.length === 0){
+      selectAll.checked = false; selectAll.indeterminate = false; selectAll.disabled = true;
+    } else {
+      selectAll.disabled = false;
+      if(selectedVisibleCount === selectableIds.length){
+        selectAll.checked = true; selectAll.indeterminate = false;
+      } else if(selectedVisibleCount === 0){
+        selectAll.checked = false; selectAll.indeterminate = false;
+      } else {
+        selectAll.checked = false; selectAll.indeterminate = true;
+      }
+    }
+  }
+
+  document.getElementById('selectAllCheckbox').addEventListener('change', (e)=>{
+    const selectableIds = state.lastSelectableIds || [];
+    if(e.target.checked){
+      selectableIds.forEach(id=> state.selectedIds.add(id));
+    } else {
+      selectableIds.forEach(id=> state.selectedIds.delete(id));
+    }
+    render();
+  });
+
+  document.getElementById('bulkDeleteBtn').addEventListener('click', async ()=>{
+    const allowedIds = [...state.selectedIds].filter(id=>{
+      const it = state.items.find(x=>x.id===id);
+      return it && canModify(it);
+    });
+    const count = allowedIds.length;
+    if(count === 0) return;
+    if(!confirm('確定要刪除已選取的 ' + count + ' 筆登記嗎？此動作無法復原。')) return;
+    const allowedSet = new Set(allowedIds);
+    state.items = state.items.filter(it => !allowedSet.has(it.id));
+    state.selectedIds.clear();
+    await saveItems();
+    render();
+    toast('已刪除 ' + count + ' 筆登記');
+  });
+
+  function adjustRowsHeight(){
+    const rowsEl = document.getElementById('rows');
+    const items = rowsEl.querySelectorAll('.m-row');
+    if(state.pageSize === 'all' || items.length === 0){
+      rowsEl.style.maxHeight = '';
+      return;
+    }
+    const visible = parseInt(state.pageSize, 10);
+    if(items.length <= visible){
+      rowsEl.style.maxHeight = '';
+      return;
+    }
+    const first = items[0].getBoundingClientRect();
+    const second = items[1] ? items[1].getBoundingClientRect() : null;
+    const rowStep = second ? (second.top - first.top) : first.height;
+    rowsEl.style.maxHeight = Math.round(rowStep * visible) + 'px';
+  }
+
+  document.getElementById('pageSizeSelect').addEventListener('change', (e)=>{
+    state.pageSize = e.target.value;
+    adjustRowsHeight();
+  });
 
   function nowTimeStr(){
     const d = new Date();
@@ -589,6 +717,7 @@
     if(!field) return;
     const row = e.target.closest('.m-row'); if(!row) return;
     const it = state.items.find(x=>x.id===row.dataset.id); if(!it) return;
+    if(!canModify(it)) return;
     it[field] = e.target.value;
     scheduleInlineSave();
   });
@@ -597,6 +726,7 @@
     if(!field) return;
     const row = e.target.closest('.m-row'); if(!row) return;
     const it = state.items.find(x=>x.id===row.dataset.id); if(!it) return;
+    if(!canModify(it)) return;
     it[field] = e.target.value;
     if(field === 'status' && e.target.value === 'done' && !it.date && !it.time){
       it.date = todayStr(); it.time = nowTimeStr();
@@ -624,16 +754,28 @@
     const type = admin
       ? `<select class="inline-select badge ${it.type==='掛號'?'type-reg':'type-pkg'}" data-field="type"><option value="掛號" ${it.type==='掛號'?'selected':''}>掛號</option><option value="包裹" ${it.type==='包裹'?'selected':''}>包裹</option></select>`
       : `<span class="badge ${it.type==='掛號'?'type-reg':'type-pkg'}">${it.type}</span>`;
+    const ownerOptions = ['私人','大量','生技','先進智能','哈伯西'];
     const owner = admin
-      ? `<select class="inline-select badge own-${it.owner==='私人'?'personal':'company'}" data-field="owner"><option value="私人" ${it.owner==='私人'?'selected':''}>私人</option><option value="公司" ${it.owner==='公司'?'selected':''}>公司</option></select>`
-      : `<span class="badge own-${it.owner==='私人'?'personal':'company'}">${it.owner}</span>`;
+      ? `<select class="inline-select badge owner-badge" data-field="owner">${ownerOptions.map(o=>`<option value="${o}" ${it.owner===o?'selected':''}>${o}</option>`).join('')}</select>`
+      : `<span class="badge owner-badge">${escapeHtml(it.owner)}</span>`;
     const pick = admin
       ? `<div class="pick-time-row"><input type="date" class="inline-date" data-field="date" value="${it.date||''}"><input type="time" class="inline-date" data-field="time" value="${it.time||''}"></div>`
       : pickTime;
     const status = admin
       ? `<select class="inline-select status-pill ${st}" data-field="status"><option value="pending" ${it.status!=='done'?'selected':''}>待領取</option><option value="done" ${it.status==='done'?'selected':''}>已領取</option></select>`
       : `<span class="status-pill ${st}"><span class="dot"></span>${stLabel}</span>`;
-    return { code, company, recipient, type, owner, pick, status };
+    let creatorChar = '', creatorClass = '';
+    if(it.creator === '小戴'){ creatorChar = '戴'; creatorClass = 'c-dai'; }
+    else if(it.creator === '代班'){ creatorChar = '代'; creatorClass = 'c-ban'; }
+    const creatorChip = creatorChar ? `<div class="creator-chip ${creatorClass}" title="登記人：${it.creator}">${creatorChar}</div>` : '';
+    const checkbox = admin
+      ? `<input type="checkbox" class="row-check" data-id="${it.id}" ${state.selectedIds.has(it.id)?'checked':''}>`
+      : '';
+    const locked = state.isAdmin && !admin;
+    const lockIcon = locked
+      ? `<div class="lock-badge" title="此筆由「${escapeHtml(it.creator||'未知')}」登記，僅小戴可以編輯或刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>`
+      : '';
+    return { code, company, recipient, type, owner, pick, status, creatorChip, checkbox, lockIcon };
   }
 
   function rowTemplateDesktop(it, admin){
@@ -647,7 +789,10 @@
       <div data-col="性質">${c.owner}</div>
       <div class="cell-main" data-col="領取時間">${c.pick}</div>
       <div data-col="狀態">${c.status}</div>
+      <div data-col="人員">${c.creatorChip}</div>
       <div class="row-actions">
+        ${c.lockIcon}
+        ${c.checkbox}
         ${admin ? `<button class="mini-btn del" title="刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>` : ''}
       </div>
     </div>`;
@@ -659,7 +804,7 @@
     <div class="m-row" data-id="${it.id}">
       <div class="mrow-line1">
         <div class="cell-code">${c.code}</div>
-        ${c.status}
+        <div style="display:flex; align-items:center; gap:8px;">${c.creatorChip}${c.status}</div>
       </div>
       <div class="mrow-line2">
         ${admin ? c.company : `<span class="mrow-company">${escapeHtml(it.company)}</span>`}
@@ -670,6 +815,8 @@
         <div class="mrow-tags">${c.type}${c.owner}</div>
         <div class="mrow-pick">${admin ? c.pick : (it.date||it.time ? [it.date, it.time].filter(Boolean).join(' ') : '入庫 '+(it.indate||'—'))}</div>
         <div class="row-actions">
+          ${c.lockIcon}
+          ${c.checkbox}
           ${admin ? `<button class="mini-btn del" title="刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>` : ''}
         </div>
       </div>
@@ -690,7 +837,7 @@
     document.getElementById('f_company').value = it ? it.company : '';
     document.getElementById('f_recipient').value = it ? it.recipient : '';
     document.getElementById('f_type').value = it ? it.type : '掛號';
-    document.getElementById('f_owner').value = it ? it.owner : '公司';
+    document.getElementById('f_owner').value = it ? it.owner : '私人';
     document.getElementById('f_status').value = it ? it.status : 'pending';
     document.getElementById('f_indate').value = it ? (it.indate || todayStr()) : todayStr();
     document.getElementById('f_date').value = it ? (it.date || '') : '';
@@ -724,7 +871,7 @@
       state.items[idx] = { ...state.items[idx], ...payload };
       toast('已更新登記', 'success');
     } else {
-      state.items.push({ id: uid(), ...payload });
+      state.items.push({ id: uid(), creator: state.adminName || '未知', ...payload });
       toast('已新增登記', 'success');
     }
     await saveItems();
@@ -733,8 +880,11 @@
   });
   async function removeItem(id){
     if(!state.isAdmin) return;
+    const it = state.items.find(x=>x.id===id);
+    if(!it || !canModify(it)){ toast('您沒有權限刪除此項目', 'error'); return; }
     if(!confirm('確定要刪除這筆登記嗎？此動作無法復原。')) return;
     state.items = state.items.filter(x=>x.id!==id);
+    state.selectedIds.delete(id);
     await saveItems();
     render();
     toast('已刪除登記');
@@ -742,11 +892,11 @@
 
   // ---------- export ----------
   document.getElementById('exportBtn').addEventListener('click', ()=>{
-    const headers = ['東西編號','寄件公司','收件人','類型','性質','狀態','入庫日期','領走日期','領走時間'];
+    const headers = ['東西編號','寄件公司','收件人','類型','性質','狀態','入庫日期','領走日期','領走時間','登記人'];
     const rows = state.items.map(it=>[
       it.code, it.company, it.recipient, it.type, it.owner,
       computeStatus(it)==='done'?'已領取':computeStatus(it)==='overdue'?'逾期未領':'待領取',
-      it.indate||'', it.date||'', it.time||''
+      it.indate||'', it.date||'', it.time||'', it.creator||''
     ]);
     const csv = [headers, ...rows].map(r=> r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
     const blob = new Blob(['\uFEFF'+csv], { type:'text/csv;charset=utf-8;' });
@@ -758,6 +908,12 @@
   });
 
   // ---------- init ----------
+  let resizeTimer = null;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(adjustRowsHeight, 200);
+  });
+
   applyTheme(); applyDevice(); updateAdminUI();
   loadItems();
 })();
