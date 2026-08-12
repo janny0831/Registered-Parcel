@@ -438,20 +438,6 @@
       <label>狀態</label>
       <select id="f_status"><option value="pending">待領取</option><option value="done">已領取</option></select>
     </div>
-    <div class="field-row">
-      <div class="field">
-        <label>入庫日期</label>
-        <input type="date" id="f_indate">
-      </div>
-      <div class="field">
-        <label>領走日期</label>
-        <input type="date" id="f_date">
-      </div>
-    </div>
-    <div class="field">
-      <label>領走時間</label>
-      <input type="time" id="f_time">
-    </div>
     <div class="modal-actions">
       <button class="fab ghost" data-close>取消</button>
       <button class="fab" id="saveBtn">儲存</button>
@@ -835,9 +821,7 @@
     const owner = full
       ? `<select class="inline-select badge owner-badge" data-field="owner">${ownerOptions.map(o=>`<option value="${o}" ${it.owner===o?'selected':''}>${o}</option>`).join('')}</select>`
       : `<span class="badge owner-badge">${escapeHtml(it.owner)}</span>`;
-    const pick = full
-      ? `<div class="pick-time-row"><input type="date" class="inline-date" data-field="date" value="${it.date||''}"><input type="time" class="inline-date" data-field="time" value="${it.time||''}"></div>`
-      : pickTime;
+    const pick = pickTime;
     const status = statusEditable
       ? `<select class="inline-select status-pill ${st}" data-field="status"><option value="pending" ${it.status!=='done'?'selected':''}>待領取</option><option value="done" ${it.status==='done'?'selected':''}>已領取</option></select>`
       : `<span class="status-pill ${st}"><span class="dot"></span>${stLabel}</span>`;
@@ -899,7 +883,7 @@
       </div>
       <div class="mrow-line3">
         <div class="mrow-tags">${c.type}${c.owner}</div>
-        <div class="mrow-pick">${c.full ? c.pick : (it.date||it.time ? [it.date, it.time].filter(Boolean).join(' ') : '入庫 '+(it.indate||'—'))}${c.modNote ? `<div class="mrow-modnote">${c.modNote.replace(' · ','')}</div>` : ''}</div>
+        <div class="mrow-pick">${(it.date||it.time) ? [it.date, it.time].filter(Boolean).join(' ') : '入庫 '+(it.indate||'—')}${c.modNote ? `<div class="mrow-modnote">${c.modNote.replace(' · ','')}</div>` : ''}</div>
         <div class="row-actions">
           ${c.lockIcon}
           ${c.checkbox}
@@ -925,18 +909,8 @@
     document.getElementById('f_type').value = it ? it.type : '掛號';
     document.getElementById('f_owner').value = it ? it.owner : '私人';
     document.getElementById('f_status').value = it ? it.status : 'pending';
-    document.getElementById('f_indate').value = it ? (it.indate || todayStr()) : todayStr();
-    document.getElementById('f_date').value = it ? (it.date || '') : '';
-    document.getElementById('f_time').value = it ? (it.time || '') : '';
     openOverlay('editOverlay');
   }
-  document.getElementById('f_status').addEventListener('change', (e)=>{
-    if(e.target.value === 'done'){
-      const dEl = document.getElementById('f_date'), tEl = document.getElementById('f_time');
-      if(!dEl.value) dEl.value = todayStr();
-      if(!tEl.value) tEl.value = nowTimeStr();
-    }
-  });
   document.getElementById('addBtn').addEventListener('click', ()=> openEdit(null));
   document.getElementById('saveBtn').addEventListener('click', async ()=>{
     const code = document.getElementById('f_code').value.trim();
@@ -944,21 +918,25 @@
     const recipient = document.getElementById('f_recipient').value.trim();
     if(!code || !company || !recipient){ toast('請完整填寫東西編號、寄件公司與收件人', 'error'); return; }
     pushHistory();
+    const status = document.getElementById('f_status').value;
     const payload = {
       code, company, recipient,
       type: document.getElementById('f_type').value,
       owner: document.getElementById('f_owner').value,
-      status: document.getElementById('f_status').value,
-      indate: document.getElementById('f_indate').value || todayStr(),
-      date: document.getElementById('f_date').value,
-      time: document.getElementById('f_time').value,
+      status,
     };
     if(state.editingId){
       const idx = state.items.findIndex(x=>x.id===state.editingId);
-      state.items[idx] = { ...state.items[idx], ...payload };
+      const prev = state.items[idx];
+      if(status === 'done' && prev.status !== 'done' && !prev.date && !prev.time){
+        payload.date = todayStr(); payload.time = nowTimeStr();
+      }
+      state.items[idx] = { ...prev, ...payload };
       toast('已更新登記', 'success');
     } else {
-      state.items.push({ id: uid(), creator: state.adminName || '未知', ...payload });
+      const newItem = { id: uid(), creator: state.adminName || '未知', indate: todayStr(), ...payload };
+      if(status === 'done'){ newItem.date = todayStr(); newItem.time = nowTimeStr(); }
+      state.items.push(newItem);
       toast('已新增登記', 'success');
     }
     await saveItems();
