@@ -131,7 +131,7 @@
   .rows-scroll::-webkit-scrollbar{width:9px;}
   .rows-scroll::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
   .rows-scroll::-webkit-scrollbar-thumb:hover{background:var(--signal);}
-  .m-head, .m-row{display:grid; grid-template-columns: 1.15fr 1.3fr 1.1fr .8fr .8fr 1.3fr .9fr 72px 116px; gap:10px; align-items:center; padding:15px 18px;}
+  .m-head, .m-row{display:grid; grid-template-columns: 1.05fr 1.15fr .95fr .65fr .6fr .6fr .65fr 1.2fr .85fr 68px 110px; gap:8px; align-items:center; padding:15px 16px;}
   .app.device-mobile .m-head{display:none;}
   .m-head{font-family:var(--font-mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--fg-muted); border-bottom:1px solid var(--line);}
   .m-row{border-bottom:1px dashed var(--line); position:relative; transition:background .25s ease, transform .25s ease;}
@@ -147,7 +147,11 @@
   .badge{display:inline-flex; align-items:center; gap:5px; font-size:13px; font-weight:700; padding:6px 12px; border-radius:999px; font-family:var(--font-body);}
   .badge.type-reg{background:rgba(45,217,181,.14); color:var(--signal);}
   .badge.type-pkg{background:rgba(255,178,56,.16); color:var(--amber);}
+  .badge.type-doc{background:rgba(139,124,255,.16); color:#9B8CFF;}
   .badge.owner-badge{background:rgba(255,255,255,.08); color:var(--fg-muted); border:1px solid var(--line);}
+  .badge.region-badge{background:rgba(255,255,255,.08); color:var(--fg-muted); border:1px solid var(--line);}
+  .badge.temp-badge{background:rgba(255,255,255,.08); color:var(--fg-muted); border:1px solid var(--line);}
+  .cell-dash{color:var(--fg-muted); opacity:.4; font-family:var(--font-mono);}
   .status-pill{display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; padding:6px 12px; border-radius:999px;}
   .status-pill.pending{background:rgba(255,178,56,.16); color:var(--amber);}
   .status-pill.done{background:rgba(45,217,181,.14); color:var(--signal);}
@@ -264,7 +268,8 @@
     color:var(--fg); font-family:var(--font-body); font-size:15px; outline:none; transition:border-color .2s ease, box-shadow .2s ease;
   }
   .field input:focus, .field select:focus{border-color:var(--signal); box-shadow:0 0 0 3px rgba(45,217,181,.15);}
-  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .field-row{display:flex; flex-wrap:wrap; gap:12px;}
+  .field-row .field{flex:1 1 100px; min-width:90px;}
   .modal-actions{display:flex; gap:10px; margin-top:20px;}
   .modal-actions .fab{flex:1; justify-content:center;}
 
@@ -347,6 +352,18 @@
         <option value="">全部類型</option>
         <option value="掛號">掛號</option>
         <option value="包裹">包裹</option>
+        <option value="文件">文件</option>
+      </select>
+      <select class="filter" id="filterRegion">
+        <option value="">全部地區</option>
+        <option value="國內">國內</option>
+        <option value="國外">國外</option>
+      </select>
+      <select class="filter" id="filterTemp">
+        <option value="">全部溫層</option>
+        <option value="常溫">常溫</option>
+        <option value="冷藏">冷藏</option>
+        <option value="冷凍">冷凍</option>
       </select>
       <select class="filter" id="filterOwner">
         <option value="">全部性質</option>
@@ -382,7 +399,7 @@
 
     <div class="manifest" id="manifest">
       <div class="m-head">
-        <div>東西編號</div><div>寄件公司</div><div>收件人</div><div>類型</div><div>性質</div><div>領取時間</div><div>狀態</div><div>人員</div><div></div>
+        <div>東西編號</div><div>寄件公司</div><div>收件人</div><div>類型</div><div>地區</div><div>溫層</div><div>性質</div><div>領取時間</div><div>狀態</div><div>人員</div><div></div>
       </div>
       <div id="rows" class="rows-scroll"></div>
     </div>
@@ -427,7 +444,15 @@
     <div class="field-row">
       <div class="field">
         <label>類型</label>
-        <select id="f_type"><option value="掛號">掛號</option><option value="包裹">包裹</option></select>
+        <select id="f_type"><option value="掛號">掛號</option><option value="包裹">包裹</option><option value="文件">文件</option></select>
+      </div>
+      <div class="field" id="regionFieldWrap" style="display:none">
+        <label>地區</label>
+        <select id="f_region"><option value="國內">國內</option><option value="國外">國外</option></select>
+      </div>
+      <div class="field" id="tempFieldWrap" style="display:none">
+        <label>溫層</label>
+        <select id="f_temp"><option value="常溫">常溫</option><option value="冷藏">冷藏</option><option value="冷凍">冷凍</option></select>
       </div>
       <div class="field">
         <label>性質</label>
@@ -625,12 +650,16 @@
   function render(){
     const q = document.getElementById('searchInput').value.trim().toLowerCase();
     const fType = document.getElementById('filterType').value;
+    const fRegion = document.getElementById('filterRegion').value;
+    const fTemp = document.getElementById('filterTemp').value;
     const fOwner = document.getElementById('filterOwner').value;
     const fStatus = document.getElementById('filterStatus').value;
 
     let list = state.items.filter(it=>{
       if(q && !(it.code+it.company+it.recipient).toLowerCase().includes(q)) return false;
       if(fType && it.type !== fType) return false;
+      if(fRegion && it.region !== fRegion) return false;
+      if(fTemp && it.tempMode !== fTemp) return false;
       if(fOwner && it.owner !== fOwner) return false;
       const st = computeStatus(it);
       if(fStatus && !(fStatus === st || (fStatus==='pending' && st==='overdue'))) return false;
@@ -783,6 +812,11 @@
       pushHistory();
     }
     it[field] = e.target.value;
+    if(field === 'type'){
+      if(it.type === '掛號'){ it.region=''; it.tempMode=''; }
+      else if(it.type === '文件'){ if(!it.region) it.region='國內'; it.tempMode=''; }
+      else if(it.type === '包裹'){ if(!it.region) it.region='國內'; if(!it.tempMode) it.tempMode='常溫'; }
+    }
     if(field === 'status' && e.target.value === 'done' && !it.date && !it.time){
       it.date = todayStr(); it.time = nowTimeStr();
       toast('已自動帶入領取時間', 'success');
@@ -805,9 +839,11 @@
     const st = computeStatus(it);
     const stLabel = st === 'done' ? '已領取' : st === 'overdue' ? '逾期未領' : '待領取';
     const pickTime = (it.date || it.time) ? [it.date, it.time].filter(Boolean).join(' ') : '—';
+    const typeTag = it.type==='掛號'?'REG': it.type==='包裹'?'PKG':'DOC';
+    const typeCls = it.type==='掛號'?'type-reg': it.type==='包裹'?'type-pkg':'type-doc';
     const code = full
-      ? `<span class="tag">${it.type==='掛號'?'REG':'PKG'}</span><input class="inline-input mono" data-field="code" value="${escapeAttr(it.code)}">`
-      : `<span class="tag">${it.type==='掛號'?'REG':'PKG'}</span>${escapeHtml(it.code)}`;
+      ? `<span class="tag">${typeTag}</span><input class="inline-input mono" data-field="code" value="${escapeAttr(it.code)}">`
+      : `<span class="tag">${typeTag}</span>${escapeHtml(it.code)}`;
     const company = full
       ? `<input class="inline-input" data-field="company" value="${escapeAttr(it.company)}">`
       : escapeHtml(it.company);
@@ -815,8 +851,20 @@
       ? `<input class="inline-input" data-field="recipient" value="${escapeAttr(it.recipient)}">`
       : escapeHtml(it.recipient);
     const type = full
-      ? `<select class="inline-select badge ${it.type==='掛號'?'type-reg':'type-pkg'}" data-field="type"><option value="掛號" ${it.type==='掛號'?'selected':''}>掛號</option><option value="包裹" ${it.type==='包裹'?'selected':''}>包裹</option></select>`
-      : `<span class="badge ${it.type==='掛號'?'type-reg':'type-pkg'}">${it.type}</span>`;
+      ? `<select class="inline-select badge ${typeCls}" data-field="type"><option value="掛號" ${it.type==='掛號'?'selected':''}>掛號</option><option value="包裹" ${it.type==='包裹'?'selected':''}>包裹</option><option value="文件" ${it.type==='文件'?'selected':''}>文件</option></select>`
+      : `<span class="badge ${typeCls}">${it.type}</span>`;
+    const regionApplicable = (it.type === '包裹' || it.type === '文件');
+    const tempApplicable = (it.type === '包裹');
+    const region = regionApplicable
+      ? (full
+          ? `<select class="inline-select badge region-badge" data-field="region"><option value="國內" ${it.region==='國內'?'selected':''}>國內</option><option value="國外" ${it.region==='國外'?'selected':''}>國外</option></select>`
+          : `<span class="badge region-badge">${escapeHtml(it.region||'國內')}</span>`)
+      : `<span class="cell-dash">—</span>`;
+    const tempMode = tempApplicable
+      ? (full
+          ? `<select class="inline-select badge temp-badge" data-field="tempMode"><option value="常溫" ${it.tempMode==='常溫'?'selected':''}>常溫</option><option value="冷藏" ${it.tempMode==='冷藏'?'selected':''}>冷藏</option><option value="冷凍" ${it.tempMode==='冷凍'?'selected':''}>冷凍</option></select>`
+          : `<span class="badge temp-badge">${escapeHtml(it.tempMode||'常溫')}</span>`)
+      : `<span class="cell-dash">—</span>`;
     const ownerOptions = ['私人','大量','生技','先進智能','哈伯西'];
     const owner = full
       ? `<select class="inline-select badge owner-badge" data-field="owner">${ownerOptions.map(o=>`<option value="${o}" ${it.owner===o?'selected':''}>${o}</option>`).join('')}</select>`
@@ -845,7 +893,7 @@
     const lockIcon = locked
       ? `<div class="lock-badge" title="此筆由「${escapeHtml(it.creator||'未知')}」登記，僅小戴可以編輯或刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>`
       : '';
-    return { code, company, recipient, type, owner, pick, status, creatorChip, creatorGroup, modNote, checkbox, lockIcon, full };
+    return { code, company, recipient, type, region, tempMode, owner, pick, status, creatorChip, creatorGroup, modNote, checkbox, lockIcon, full };
   }
 
   function rowTemplateDesktop(it){
@@ -856,6 +904,8 @@
       <div class="cell-main" data-col="寄件公司">${c.company}<div class="cell-sub">入庫 ${it.indate||'—'}${c.modNote}</div></div>
       <div class="cell-main" data-col="收件人">${c.recipient}</div>
       <div data-col="類型">${c.type}</div>
+      <div data-col="地區">${c.region}</div>
+      <div data-col="溫層">${c.tempMode}</div>
       <div data-col="性質">${c.owner}</div>
       <div class="cell-main" data-col="領取時間">${c.pick}</div>
       <div data-col="狀態">${c.status}</div>
@@ -870,6 +920,8 @@
 
   function rowTemplateMobile(it){
     const c = buildCells(it);
+    const extraTags = (it.type==='包裹'||it.type==='文件') ? c.region : '';
+    const tempTag = (it.type==='包裹') ? c.tempMode : '';
     return `
     <div class="m-row" data-id="${it.id}">
       <div class="mrow-line1">
@@ -882,7 +934,7 @@
         ${c.full ? c.recipient : `<span class="mrow-recipient">${escapeHtml(it.recipient)}</span>`}
       </div>
       <div class="mrow-line3">
-        <div class="mrow-tags">${c.type}${c.owner}</div>
+        <div class="mrow-tags">${c.type}${extraTags}${tempTag}${c.owner}</div>
         <div class="mrow-pick">${(it.date||it.time) ? [it.date, it.time].filter(Boolean).join(' ') : '入庫 '+(it.indate||'—')}${c.modNote ? `<div class="mrow-modnote">${c.modNote.replace(' · ','')}</div>` : ''}</div>
         <div class="row-actions">
           ${c.lockIcon}
@@ -894,9 +946,17 @@
   }
 
   ['searchInput'].forEach(id=> document.getElementById(id).addEventListener('input', render));
-  ['filterType','filterOwner','filterStatus'].forEach(id=> document.getElementById(id).addEventListener('change', render));
+  ['filterType','filterRegion','filterTemp','filterOwner','filterStatus'].forEach(id=> document.getElementById(id).addEventListener('change', render));
 
   // ---------- add/edit ----------
+  function updateTypeFields(){
+    const t = document.getElementById('f_type').value;
+    const regionWrap = document.getElementById('regionFieldWrap');
+    const tempWrap = document.getElementById('tempFieldWrap');
+    regionWrap.style.display = (t === '包裹' || t === '文件') ? '' : 'none';
+    tempWrap.style.display = (t === '包裹') ? '' : 'none';
+  }
+  document.getElementById('f_type').addEventListener('change', updateTypeFields);
   function openEdit(id){
     if(!state.isAdmin){ toast('請先以管理員登入才能編輯', 'error'); return; }
     state.editingId = id || null;
@@ -907,8 +967,11 @@
     document.getElementById('f_company').value = it ? it.company : '';
     document.getElementById('f_recipient').value = it ? it.recipient : '';
     document.getElementById('f_type').value = it ? it.type : '掛號';
+    document.getElementById('f_region').value = it ? (it.region || '國內') : '國內';
+    document.getElementById('f_temp').value = it ? (it.tempMode || '常溫') : '常溫';
     document.getElementById('f_owner').value = it ? it.owner : '私人';
     document.getElementById('f_status').value = it ? it.status : 'pending';
+    updateTypeFields();
     openOverlay('editOverlay');
   }
   document.getElementById('addBtn').addEventListener('click', ()=> openEdit(null));
@@ -919,9 +982,12 @@
     if(!code || !company || !recipient){ toast('請完整填寫東西編號、寄件公司與收件人', 'error'); return; }
     pushHistory();
     const status = document.getElementById('f_status').value;
+    const type = document.getElementById('f_type').value;
     const payload = {
       code, company, recipient,
-      type: document.getElementById('f_type').value,
+      type,
+      region: (type === '包裹' || type === '文件') ? document.getElementById('f_region').value : '',
+      tempMode: (type === '包裹') ? document.getElementById('f_temp').value : '',
       owner: document.getElementById('f_owner').value,
       status,
     };
@@ -958,9 +1024,9 @@
 
   // ---------- export ----------
   document.getElementById('exportBtn').addEventListener('click', ()=>{
-    const headers = ['東西編號','寄件公司','收件人','類型','性質','狀態','入庫日期','領走日期','領走時間','登記人','最後修改人','最後修改時間'];
+    const headers = ['東西編號','寄件公司','收件人','類型','地區','溫層','性質','狀態','入庫日期','領走日期','領走時間','登記人','最後修改人','最後修改時間'];
     const rows = state.items.map(it=>[
-      it.code, it.company, it.recipient, it.type, it.owner,
+      it.code, it.company, it.recipient, it.type, it.region||'', it.tempMode||'', it.owner,
       computeStatus(it)==='done'?'已領取':computeStatus(it)==='overdue'?'逾期未領':'待領取',
       it.indate||'', it.date||'', it.time||'', it.creator||'', it.lastModifiedBy||'', it.lastModifiedAt||''
     ]);
