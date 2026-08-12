@@ -131,7 +131,7 @@
   .rows-scroll::-webkit-scrollbar{width:9px;}
   .rows-scroll::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
   .rows-scroll::-webkit-scrollbar-thumb:hover{background:var(--signal);}
-  .m-head, .m-row{display:grid; grid-template-columns: 1.15fr 1.3fr 1.1fr .8fr .8fr 1.3fr .9fr 44px 116px; gap:10px; align-items:center; padding:15px 18px;}
+  .m-head, .m-row{display:grid; grid-template-columns: 1.15fr 1.3fr 1.1fr .8fr .8fr 1.3fr .9fr 72px 116px; gap:10px; align-items:center; padding:15px 18px;}
   .app.device-mobile .m-head{display:none;}
   .m-head{font-family:var(--font-mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--fg-muted); border-bottom:1px solid var(--line);}
   .m-row{border-bottom:1px dashed var(--line); position:relative; transition:background .25s ease, transform .25s ease;}
@@ -182,6 +182,12 @@
   }
   .creator-chip.c-dai{background:var(--signal); color:#04231C;}
   .creator-chip.c-ban{background:var(--amber); color:#3A2200;}
+  .creator-group{display:flex; align-items:center; gap:5px;}
+  .creator-chip.mod-chip{
+    width:24px; height:24px; font-size:12px; border-radius:8px; box-shadow:none;
+    outline:2px solid var(--panel); outline-offset:-1px; opacity:.9;
+  }
+  .mrow-modnote{font-size:10px; color:var(--fg-muted); opacity:.75; margin-top:2px; text-align:right;}
 
   /* inline-editable fields (admin mode) */
   .inline-input, .inline-select{
@@ -233,6 +239,7 @@
   .fab:hover{transform:translateY(-3px) scale(1.02); box-shadow:0 18px 36px -10px rgba(45,217,181,.65);}
   .fab.ghost{background:transparent; color:var(--fg); border:1px solid var(--line); box-shadow:none;}
   .fab.ghost:hover{border-color:var(--amber); color:var(--amber); transform:translateY(-3px);}
+  .fab:disabled{opacity:.35; cursor:not-allowed; transform:none !important; box-shadow:none !important; border-color:var(--line) !important; color:var(--fg-muted) !important;}
   .fab svg{width:17px;height:17px;}
 
   footer.note{margin-top:26px; text-align:center; font-size:11.5px; color:var(--fg-muted); font-family:var(--font-mono); letter-spacing:.04em;}
@@ -385,6 +392,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
         新增登記
       </button>
+      <button class="fab ghost" id="undoBtn" style="display:none" disabled title="復原上一步操作">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14l-4-4 4-4"/><path d="M5 10h9a5 5 0 010 10h-1"/></svg>
+        <span id="undoBtnLabel">復原上一步</span>
+      </button>
       <button class="fab ghost" id="exportBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
         匯出 CSV
@@ -468,7 +479,8 @@
 
 <script>
 (function(){
-  const state = { items: [], theme: 'dark', device: 'desktop', isAdmin: false, adminName: null, editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [] };
+  const state = { items: [], theme: 'dark', device: 'desktop', isAdmin: false, adminName: null, editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
+  const HISTORY_LIMIT = 20;
 
   // ---------- persistence ----------
   const STORE_KEY = 'mailroom:items';
@@ -484,6 +496,33 @@
     catch(e){ toast('雲端同步失敗，資料僅保留於本次畫面', 'error'); }
   }
   function seedData(){ return []; }
+
+  // ---------- undo history ----------
+  function pushHistory(){
+    state.history.push(JSON.stringify(state.items));
+    if(state.history.length > HISTORY_LIMIT) state.history.shift();
+    updateUndoBtn();
+  }
+  function updateUndoBtn(){
+    const btn = document.getElementById('undoBtn');
+    if(!btn) return;
+    btn.style.display = state.isAdmin ? 'inline-flex' : 'none';
+    btn.disabled = state.history.length === 0;
+    document.getElementById('undoBtnLabel').textContent = state.history.length > 0
+      ? '復原上一步 (' + state.history.length + ')'
+      : '復原上一步';
+  }
+  async function undoLast(){
+    if(state.history.length === 0) return;
+    const prev = state.history.pop();
+    state.items = JSON.parse(prev);
+    state.selectedIds.clear();
+    await saveItems();
+    render();
+    updateUndoBtn();
+    toast('已復原上一步操作', 'success');
+  }
+  document.getElementById('undoBtn').addEventListener('click', undoLast);
 
   // ---------- utils ----------
   function uid(){ return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
@@ -530,7 +569,8 @@
       : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>管理員登入';
     document.getElementById('adminBtn').classList.toggle('on', state.isAdmin);
     document.getElementById('bulkBar').style.display = state.isAdmin ? 'flex' : 'none';
-    if(!state.isAdmin) state.selectedIds.clear();
+    if(!state.isAdmin){ state.selectedIds.clear(); state.history = []; }
+    updateUndoBtn();
     render();
   }
   document.getElementById('adminBtn').addEventListener('click', ()=>{
@@ -578,11 +618,23 @@
     if(item.indate && daysBetween(item.indate) > 3) return 'overdue';
     return 'pending';
   }
-  function canModify(item){
+  function canFullEdit(item){
     if(!state.isAdmin) return false;
     if(state.adminName === '小戴') return true;
     if(state.adminName === '代班') return item.creator === '代班';
     return false;
+  }
+  function canEditStatus(item){
+    return state.isAdmin;
+  }
+  function stampModification(item){
+    if(state.adminName && state.adminName !== item.creator){
+      item.lastModifiedBy = state.adminName;
+      item.lastModifiedAt = todayStr() + ' ' + nowTimeStr();
+    } else {
+      delete item.lastModifiedBy;
+      delete item.lastModifiedAt;
+    }
   }
   function render(){
     const q = document.getElementById('searchInput').value.trim().toLowerCase();
@@ -604,7 +656,7 @@
       rows.innerHTML = '<div class="empty-state"><svg class="stub" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M8 6V4h8v2"/></svg><div>目前沒有符合條件的登記紀錄</div></div>';
     } else {
       const tpl = state.device === 'mobile' ? rowTemplateMobile : rowTemplateDesktop;
-      rows.innerHTML = list.map(it => tpl(it, canModify(it))).join('');
+      rows.innerHTML = list.map(it => tpl(it)).join('');
     }
 
     // stats
@@ -614,7 +666,7 @@
     document.getElementById('statToday').textContent = state.items.filter(it=>it.indate === todayStr()).length;
 
     state.lastFilteredIds = list.map(it=>it.id);
-    state.lastSelectableIds = list.filter(it=>canModify(it)).map(it=>it.id);
+    state.lastSelectableIds = list.filter(it=>canFullEdit(it)).map(it=>it.id);
 
     rows.querySelectorAll('.del').forEach(btn=>{
       btn.addEventListener('click', (e)=>{ e.stopPropagation(); removeItem(btn.closest('.m-row').dataset.id); });
@@ -665,11 +717,12 @@
   document.getElementById('bulkDeleteBtn').addEventListener('click', async ()=>{
     const allowedIds = [...state.selectedIds].filter(id=>{
       const it = state.items.find(x=>x.id===id);
-      return it && canModify(it);
+      return it && canFullEdit(it);
     });
     const count = allowedIds.length;
     if(count === 0) return;
-    if(!confirm('確定要刪除已選取的 ' + count + ' 筆登記嗎？此動作無法復原。')) return;
+    if(!confirm('確定要刪除已選取的 ' + count + ' 筆登記嗎？之後可以用「復原上一步」找回。')) return;
+    pushHistory();
     const allowedSet = new Set(allowedIds);
     state.items = state.items.filter(it => !allowedSet.has(it.id));
     state.selectedIds.clear();
@@ -712,13 +765,25 @@
     clearTimeout(inlineSaveTimer);
     inlineSaveTimer = setTimeout(()=>{ saveItems(); }, 400);
   }
-  document.getElementById('rows').addEventListener('input', (e)=>{
+  let historyArmed = true;
+  document.getElementById('rows').addEventListener('focusin', (e)=>{
+    const field = e.target.dataset && e.target.dataset.field;
+    if(!field || e.target.type !== 'text') return;
+    if(historyArmed){ pushHistory(); historyArmed = false; }
+  });
+  document.getElementById('rows').addEventListener('focusout', (e)=>{
     const field = e.target.dataset && e.target.dataset.field;
     if(!field) return;
+    historyArmed = true;
+  });
+  document.getElementById('rows').addEventListener('input', (e)=>{
+    const field = e.target.dataset && e.target.dataset.field;
+    if(!field || e.target.type !== 'text') return;
     const row = e.target.closest('.m-row'); if(!row) return;
     const it = state.items.find(x=>x.id===row.dataset.id); if(!it) return;
-    if(!canModify(it)) return;
+    if(!canFullEdit(it)) return;
     it[field] = e.target.value;
+    stampModification(it);
     scheduleInlineSave();
   });
   document.getElementById('rows').addEventListener('change', (e)=>{
@@ -726,98 +791,119 @@
     if(!field) return;
     const row = e.target.closest('.m-row'); if(!row) return;
     const it = state.items.find(x=>x.id===row.dataset.id); if(!it) return;
-    if(!canModify(it)) return;
+    const allowed = field === 'status' ? canEditStatus(it) : canFullEdit(it);
+    if(!allowed) return;
+    if(e.target.tagName === 'SELECT' || e.target.type === 'date' || e.target.type === 'time'){
+      pushHistory();
+    }
     it[field] = e.target.value;
     if(field === 'status' && e.target.value === 'done' && !it.date && !it.time){
       it.date = todayStr(); it.time = nowTimeStr();
       toast('已自動帶入領取時間', 'success');
     }
+    stampModification(it);
     saveItems();
     render();
   });
   function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function escapeAttr(s){ return escapeHtml(s); }
 
-  function buildCells(it, admin){
+  function charFor(name){
+    if(name === '小戴') return { ch: '戴', cls: 'c-dai' };
+    if(name === '代班') return { ch: '代', cls: 'c-ban' };
+    return null;
+  }
+  function buildCells(it){
+    const full = canFullEdit(it);
+    const statusEditable = canEditStatus(it);
     const st = computeStatus(it);
     const stLabel = st === 'done' ? '已領取' : st === 'overdue' ? '逾期未領' : '待領取';
     const pickTime = (it.date || it.time) ? [it.date, it.time].filter(Boolean).join(' ') : '—';
-    const code = admin
+    const code = full
       ? `<span class="tag">${it.type==='掛號'?'REG':'PKG'}</span><input class="inline-input mono" data-field="code" value="${escapeAttr(it.code)}">`
       : `<span class="tag">${it.type==='掛號'?'REG':'PKG'}</span>${escapeHtml(it.code)}`;
-    const company = admin
+    const company = full
       ? `<input class="inline-input" data-field="company" value="${escapeAttr(it.company)}">`
       : escapeHtml(it.company);
-    const recipient = admin
+    const recipient = full
       ? `<input class="inline-input" data-field="recipient" value="${escapeAttr(it.recipient)}">`
       : escapeHtml(it.recipient);
-    const type = admin
+    const type = full
       ? `<select class="inline-select badge ${it.type==='掛號'?'type-reg':'type-pkg'}" data-field="type"><option value="掛號" ${it.type==='掛號'?'selected':''}>掛號</option><option value="包裹" ${it.type==='包裹'?'selected':''}>包裹</option></select>`
       : `<span class="badge ${it.type==='掛號'?'type-reg':'type-pkg'}">${it.type}</span>`;
     const ownerOptions = ['私人','大量','生技','先進智能','哈伯西'];
-    const owner = admin
+    const owner = full
       ? `<select class="inline-select badge owner-badge" data-field="owner">${ownerOptions.map(o=>`<option value="${o}" ${it.owner===o?'selected':''}>${o}</option>`).join('')}</select>`
       : `<span class="badge owner-badge">${escapeHtml(it.owner)}</span>`;
-    const pick = admin
+    const pick = full
       ? `<div class="pick-time-row"><input type="date" class="inline-date" data-field="date" value="${it.date||''}"><input type="time" class="inline-date" data-field="time" value="${it.time||''}"></div>`
       : pickTime;
-    const status = admin
+    const status = statusEditable
       ? `<select class="inline-select status-pill ${st}" data-field="status"><option value="pending" ${it.status!=='done'?'selected':''}>待領取</option><option value="done" ${it.status==='done'?'selected':''}>已領取</option></select>`
       : `<span class="status-pill ${st}"><span class="dot"></span>${stLabel}</span>`;
-    let creatorChar = '', creatorClass = '';
-    if(it.creator === '小戴'){ creatorChar = '戴'; creatorClass = 'c-dai'; }
-    else if(it.creator === '代班'){ creatorChar = '代'; creatorClass = 'c-ban'; }
-    const creatorChip = creatorChar ? `<div class="creator-chip ${creatorClass}" title="登記人：${it.creator}">${creatorChar}</div>` : '';
-    const checkbox = admin
+
+    const creatorInfo = charFor(it.creator);
+    const creatorChip = creatorInfo ? `<div class="creator-chip ${creatorInfo.cls}" title="登記人：${it.creator}">${creatorInfo.ch}</div>` : '';
+    let modChip = '';
+    if(it.lastModifiedBy && it.lastModifiedBy !== it.creator){
+      const modInfo = charFor(it.lastModifiedBy);
+      if(modInfo){
+        modChip = `<div class="creator-chip mod-chip ${modInfo.cls}" title="最後修改：${it.lastModifiedBy}於 ${it.lastModifiedAt||''}">${modInfo.ch}</div>`;
+      }
+    }
+    const creatorGroup = `<div class="creator-group">${creatorChip}${modChip}</div>`;
+    const modNote = (it.lastModifiedBy && it.lastModifiedBy !== it.creator && it.lastModifiedAt) ? ' · 最後修改 ' + it.lastModifiedAt : '';
+
+    const checkbox = full
       ? `<input type="checkbox" class="row-check" data-id="${it.id}" ${state.selectedIds.has(it.id)?'checked':''}>`
       : '';
-    const locked = state.isAdmin && !admin;
+    const locked = state.isAdmin && !full && !statusEditable;
     const lockIcon = locked
       ? `<div class="lock-badge" title="此筆由「${escapeHtml(it.creator||'未知')}」登記，僅小戴可以編輯或刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>`
       : '';
-    return { code, company, recipient, type, owner, pick, status, creatorChip, checkbox, lockIcon };
+    return { code, company, recipient, type, owner, pick, status, creatorChip, creatorGroup, modNote, checkbox, lockIcon, full };
   }
 
-  function rowTemplateDesktop(it, admin){
-    const c = buildCells(it, admin);
+  function rowTemplateDesktop(it){
+    const c = buildCells(it);
     return `
     <div class="m-row" data-id="${it.id}">
       <div class="cell-code" data-col="東西編號">${c.code}</div>
-      <div class="cell-main" data-col="寄件公司">${c.company}<div class="cell-sub">入庫 ${it.indate||'—'}</div></div>
+      <div class="cell-main" data-col="寄件公司">${c.company}<div class="cell-sub">入庫 ${it.indate||'—'}${c.modNote}</div></div>
       <div class="cell-main" data-col="收件人">${c.recipient}</div>
       <div data-col="類型">${c.type}</div>
       <div data-col="性質">${c.owner}</div>
       <div class="cell-main" data-col="領取時間">${c.pick}</div>
       <div data-col="狀態">${c.status}</div>
-      <div data-col="人員">${c.creatorChip}</div>
+      <div data-col="人員">${c.creatorGroup}</div>
       <div class="row-actions">
         ${c.lockIcon}
         ${c.checkbox}
-        ${admin ? `<button class="mini-btn del" title="刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>` : ''}
+        ${c.full ? `<button class="mini-btn del" title="刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>` : ''}
       </div>
     </div>`;
   }
 
-  function rowTemplateMobile(it, admin){
-    const c = buildCells(it, admin);
+  function rowTemplateMobile(it){
+    const c = buildCells(it);
     return `
     <div class="m-row" data-id="${it.id}">
       <div class="mrow-line1">
         <div class="cell-code">${c.code}</div>
-        <div style="display:flex; align-items:center; gap:8px;">${c.creatorChip}${c.status}</div>
+        <div style="display:flex; align-items:center; gap:8px;">${c.creatorGroup}${c.status}</div>
       </div>
       <div class="mrow-line2">
-        ${admin ? c.company : `<span class="mrow-company">${escapeHtml(it.company)}</span>`}
+        ${c.full ? c.company : `<span class="mrow-company">${escapeHtml(it.company)}</span>`}
         <span class="mrow-arrow">→</span>
-        ${admin ? c.recipient : `<span class="mrow-recipient">${escapeHtml(it.recipient)}</span>`}
+        ${c.full ? c.recipient : `<span class="mrow-recipient">${escapeHtml(it.recipient)}</span>`}
       </div>
       <div class="mrow-line3">
         <div class="mrow-tags">${c.type}${c.owner}</div>
-        <div class="mrow-pick">${admin ? c.pick : (it.date||it.time ? [it.date, it.time].filter(Boolean).join(' ') : '入庫 '+(it.indate||'—'))}</div>
+        <div class="mrow-pick">${c.full ? c.pick : (it.date||it.time ? [it.date, it.time].filter(Boolean).join(' ') : '入庫 '+(it.indate||'—'))}${c.modNote ? `<div class="mrow-modnote">${c.modNote.replace(' · ','')}</div>` : ''}</div>
         <div class="row-actions">
           ${c.lockIcon}
           ${c.checkbox}
-          ${admin ? `<button class="mini-btn del" title="刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>` : ''}
+          ${c.full ? `<button class="mini-btn del" title="刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>` : ''}
         </div>
       </div>
     </div>`;
@@ -857,6 +943,7 @@
     const company = document.getElementById('f_company').value.trim();
     const recipient = document.getElementById('f_recipient').value.trim();
     if(!code || !company || !recipient){ toast('請完整填寫東西編號、寄件公司與收件人', 'error'); return; }
+    pushHistory();
     const payload = {
       code, company, recipient,
       type: document.getElementById('f_type').value,
@@ -881,8 +968,9 @@
   async function removeItem(id){
     if(!state.isAdmin) return;
     const it = state.items.find(x=>x.id===id);
-    if(!it || !canModify(it)){ toast('您沒有權限刪除此項目', 'error'); return; }
-    if(!confirm('確定要刪除這筆登記嗎？此動作無法復原。')) return;
+    if(!it || !canFullEdit(it)){ toast('您沒有權限刪除此項目', 'error'); return; }
+    if(!confirm('確定要刪除這筆登記嗎？之後可以用「復原上一步」找回。')) return;
+    pushHistory();
     state.items = state.items.filter(x=>x.id!==id);
     state.selectedIds.delete(id);
     await saveItems();
@@ -892,11 +980,11 @@
 
   // ---------- export ----------
   document.getElementById('exportBtn').addEventListener('click', ()=>{
-    const headers = ['東西編號','寄件公司','收件人','類型','性質','狀態','入庫日期','領走日期','領走時間','登記人'];
+    const headers = ['東西編號','寄件公司','收件人','類型','性質','狀態','入庫日期','領走日期','領走時間','登記人','最後修改人','最後修改時間'];
     const rows = state.items.map(it=>[
       it.code, it.company, it.recipient, it.type, it.owner,
       computeStatus(it)==='done'?'已領取':computeStatus(it)==='overdue'?'逾期未領':'待領取',
-      it.indate||'', it.date||'', it.time||'', it.creator||''
+      it.indate||'', it.date||'', it.time||'', it.creator||'', it.lastModifiedBy||'', it.lastModifiedAt||''
     ]);
     const csv = [headers, ...rows].map(r=> r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
     const blob = new Blob(['\uFEFF'+csv], { type:'text/csv;charset=utf-8;' });
