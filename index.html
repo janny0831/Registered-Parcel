@@ -300,6 +300,29 @@
 
   ::-webkit-scrollbar{width:8px; height:8px;}
   ::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
+
+  /* ---- 介面透明度調整（僅管理員258/小戴，僅本機生效） ---- */
+  #app{opacity:var(--ui-opacity,1); transition:opacity .18s ease;}
+  .opacity-hud{
+    position:fixed; right:16px; top:50%; transform:translateY(-50%) scale(.9);
+    z-index:200; width:52px; height:220px; border-radius:26px;
+    background:rgba(20,20,24,.55); backdrop-filter:blur(14px) saturate(160%);
+    border:1px solid rgba(255,255,255,.14); box-shadow:0 12px 30px rgba(0,0,0,.35);
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+    padding:10px 0; opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease;
+    touch-action:none; user-select:none;
+  }
+  .opacity-hud.show{opacity:1; pointer-events:auto; transform:translateY(-50%) scale(1);}
+  .opacity-hud .oh-track{
+    position:relative; width:14px; height:150px; border-radius:8px;
+    background:rgba(255,255,255,.14); overflow:hidden; cursor:pointer;
+  }
+  .opacity-hud .oh-fill{
+    position:absolute; left:0; right:0; bottom:0; width:100%;
+    background:linear-gradient(180deg,var(--signal),var(--signal-dim)); border-radius:8px;
+  }
+  .opacity-hud .oh-icon{color:#fff; opacity:.85; margin-bottom:8px; width:18px; height:18px;}
+  .opacity-hud .oh-pct{color:#fff; font-family:var(--font-mono); font-size:11px; margin-top:8px; opacity:.85;}
 </style>
 </head>
 <body data-theme="dark">
@@ -336,6 +359,10 @@
         <button class="icon-btn" id="bgChangeBtn" style="display:none;" title="更換螢幕背景（僅本機顯示）">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           更換背景
+        </button>
+        <button class="icon-btn" id="opacityBtn" style="display:none;" title="調整介面透明度（僅本機顯示）">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 000 18z" fill="currentColor" stroke="none"/></svg>
+          透明度
         </button>
         <input type="file" id="bgFileInput" accept="image/*" style="display:none;">
       </div>
@@ -493,6 +520,12 @@
 
 <div class="toast-wrap" id="toastWrap"></div>
 
+<div class="opacity-hud" id="opacityHud">
+  <svg class="oh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+  <div class="oh-track" id="ohTrack"><div class="oh-fill" id="ohFill"></div></div>
+  <div class="oh-pct" id="ohPct">100%</div>
+</div>
+
 <script>
 (function(){
   const state = { items: [], theme: 'dark', device: 'desktop', isAdmin: false, adminName: null, editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
@@ -588,6 +621,9 @@
     if(!state.isAdmin){ state.selectedIds.clear(); state.history = []; }
     const bgBtn = document.getElementById('bgChangeBtn');
     if(bgBtn) bgBtn.style.display = (state.isAdmin && state.adminName === '小戴') ? 'inline-flex' : 'none';
+    const opBtn = document.getElementById('opacityBtn');
+    if(opBtn) opBtn.style.display = (state.isAdmin && state.adminName === '小戴') ? 'inline-flex' : 'none';
+    if(!(state.isAdmin && state.adminName === '小戴')){ hideOpacityHud(); }
     updateUndoBtn();
     render();
   }
@@ -641,6 +677,88 @@
     reader.readAsDataURL(file);
   });
   applyCustomBackground();
+
+  // ---------- 介面透明度調整（僅限管理員258/小戴，僅儲存在本機該手機瀏覽器中） ----------
+  const UI_OPACITY_LOCAL_KEY = 'mailroom:localUiOpacity:258';
+  const UI_OPACITY_MIN = 0.15;
+  let opacityHideTimer = null;
+  function applyUiOpacity(val){
+    const v = Math.max(UI_OPACITY_MIN, Math.min(1, val));
+    document.documentElement.style.setProperty('--ui-opacity', v);
+    const pct = Math.round(v * 100);
+    const fill = document.getElementById('ohFill');
+    const pctEl = document.getElementById('ohPct');
+    if(fill) fill.style.height = pct + '%';
+    if(pctEl) pctEl.textContent = pct + '%';
+    return v;
+  }
+  function loadUiOpacity(){
+    let v = 1;
+    try{
+      const saved = localStorage.getItem(UI_OPACITY_LOCAL_KEY);
+      if(saved !== null){ v = parseFloat(saved); if(isNaN(v)) v = 1; }
+    }catch(e){}
+    applyUiOpacity(v);
+  }
+  function saveUiOpacity(v){
+    try{ localStorage.setItem(UI_OPACITY_LOCAL_KEY, String(v)); }catch(e){}
+  }
+  function showOpacityHud(){
+    if(!(state.isAdmin && state.adminName === '小戴')) return;
+    const hud = document.getElementById('opacityHud');
+    hud.classList.add('show');
+    clearTimeout(opacityHideTimer);
+    opacityHideTimer = setTimeout(hideOpacityHud, 3000);
+  }
+  function hideOpacityHud(){
+    const hud = document.getElementById('opacityHud');
+    if(hud) hud.classList.remove('show');
+    clearTimeout(opacityHideTimer);
+  }
+  document.getElementById('opacityBtn').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    const hud = document.getElementById('opacityHud');
+    if(hud.classList.contains('show')){ hideOpacityHud(); } else { showOpacityHud(); }
+  });
+  (function initOpacityTrackDrag(){
+    const track = document.getElementById('ohTrack');
+    if(!track) return;
+    let dragging = false;
+    function valueFromEvent(ev){
+      const rect = track.getBoundingClientRect();
+      const y = (ev.touches ? ev.touches[0].clientY : ev.clientY);
+      let ratio = (rect.bottom - y) / rect.height;
+      ratio = Math.max(0, Math.min(1, ratio));
+      return UI_OPACITY_MIN + ratio * (1 - UI_OPACITY_MIN);
+    }
+    function onDown(ev){
+      if(!(state.isAdmin && state.adminName === '小戴')) return;
+      dragging = true;
+      clearTimeout(opacityHideTimer);
+      const v = applyUiOpacity(valueFromEvent(ev));
+      saveUiOpacity(v);
+      ev.preventDefault();
+    }
+    function onMove(ev){
+      if(!dragging) return;
+      const v = applyUiOpacity(valueFromEvent(ev));
+      saveUiOpacity(v);
+      ev.preventDefault();
+    }
+    function onUp(){
+      if(!dragging) return;
+      dragging = false;
+      opacityHideTimer = setTimeout(hideOpacityHud, 1500);
+    }
+    track.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    track.addEventListener('touchstart', onDown, {passive:false});
+    window.addEventListener('touchmove', onMove, {passive:false});
+    window.addEventListener('touchend', onUp);
+  })();
+  loadUiOpacity();
+
   document.getElementById('adminBtn').addEventListener('click', ()=>{
     if(state.isAdmin){ state.isAdmin = false; state.adminName = null; updateAdminUI(); toast('已登出管理員模式'); return; }
     openOverlay('loginOverlay');
