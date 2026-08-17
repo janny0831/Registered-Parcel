@@ -125,6 +125,16 @@
   }
   select.filter:focus{border-color:var(--signal);}
 
+  /* ---------- date range filter ---------- */
+  .date-filter-wrap{display:flex; align-items:center; gap:6px; background:rgba(var(--paper-tone),.05); border:1px solid var(--line); border-radius:10px; padding:6px 8px;}
+  .date-filter-input{
+    background:transparent; border:none; color:var(--fg); font-family:var(--font-body); font-size:13px; outline:none; cursor:pointer; width:124px;
+  }
+  .date-filter-input::-webkit-calendar-picker-indicator{filter:var(--icon-invert,none); opacity:.7; cursor:pointer;}
+  [data-theme="dark"] .date-filter-input::-webkit-calendar-picker-indicator{filter:invert(1); opacity:.7;}
+  .date-filter-sep{color:var(--fg-muted); font-size:12px;}
+  #filterDateReset{width:30px; height:30px;}
+
   /* ---------- table (manifest ledger) ---------- */
   .manifest{margin-top:18px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow);}
   .rows-scroll{overflow-y:auto; scroll-behavior:smooth; transition:max-height .3s ease;}
@@ -323,9 +333,22 @@
   }
   .opacity-hud .oh-icon{color:#fff; opacity:.85; margin-bottom:8px; width:18px; height:18px;}
   .opacity-hud .oh-pct{color:#fff; font-family:var(--font-mono); font-size:11px; margin-top:8px; opacity:.85;}
+
+  /* ---- 底部功能按鍵改為實色區分，不透明 ---- */
+  #undoBtn{background:var(--amber); color:#3A2200; border-color:transparent; box-shadow:none;}
+  #undoBtn:hover:not(:disabled){background:var(--amber); color:#3A2200; opacity:.86; border-color:transparent;}
+  #exportBtn{background:var(--signal); color:#04231C; border-color:transparent; box-shadow:none;}
+  #exportBtn:hover{background:var(--signal); color:#04231C; opacity:.86; border-color:transparent;}
+  #fullExportBtn{background:#9B8CFF; color:#1E1440; border-color:transparent; box-shadow:none;}
+  #fullExportBtn:hover{background:#9B8CFF; color:#1E1440; opacity:.86; border-color:transparent;}
+  #fullImportBtn{background:var(--danger); color:#fff; border-color:transparent; box-shadow:none;}
+  #fullImportBtn:hover{background:var(--danger); color:#fff; opacity:.86; border-color:transparent;}
 </style>
 </head>
-<body data-theme="dark">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<body data-theme="light">
 
 <div class="fluid-bg"><span class="b1"></span><span class="b2"></span><span class="b3"></span></div>
 <div class="grain"></div>
@@ -418,6 +441,14 @@
         <option value="20">顯示 20 筆</option>
         <option value="all">顯示全部</option>
       </select>
+      <div class="date-filter-wrap" id="dateFilterWrap">
+        <input type="date" class="date-filter-input" id="filterDateFrom" title="起始日期（依入庫日期篩選）">
+        <span class="date-filter-sep">–</span>
+        <input type="date" class="date-filter-input" id="filterDateTo" title="結束日期（依入庫日期篩選）">
+        <button class="mini-btn" id="filterDateReset" title="清除日期篩選，顯示所有日期">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+      </div>
       <div class="bulk-bar" id="bulkBar" style="display:none">
         <label class="bulk-select-all">
           <input type="checkbox" id="selectAllCheckbox"><span>全選</span>
@@ -447,8 +478,17 @@
       </button>
       <button class="fab ghost" id="exportBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
-        匯出 CSV
+        匯出 XLSX
       </button>
+      <button class="fab ghost" id="fullExportBtn" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+        完整匯出 XLSX
+      </button>
+      <button class="fab ghost" id="fullImportBtn" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V9m0 0l-4 4m4-4l4 4M4 3h16"/></svg>
+        完整匯入 XLSX
+      </button>
+      <input type="file" id="fullImportFileInput" accept=".xlsx,.xls" style="display:none">
     </div>
 
     <footer class="note">DALIANG MAILROOM TERMINAL · 資料即時同步 · v1.0</footer>
@@ -528,12 +568,38 @@
 
 <script>
 (function(){
-  const state = { items: [], theme: 'dark', device: 'desktop', isAdmin: false, adminName: null, editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
+  const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
   const HISTORY_LIMIT = 20;
+
+  // ====== GAS（Google Apps Script）後端設定 ======
+  // 請將 Google Apps Script 部署後取得的「網頁應用程式網址」貼在下面的 GAS_URL
+  // 例如：https://script.google.com/macros/s/AKfycbxxxxxxxxxxxxxxxxxxxxxxx/exec
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwGFpKDT-Hssp_LLSZ4rt-aNeHHyCQdBRq_q3k6H9RFumwC6-QRZfqUBa2cRLsWs3hP/exec';
+  // SHEET_NAME：這一份系統對應到 Google 試算表中的「工作表（分頁）名稱」
+  // 不同的公司行號/據點請部署不同的檔案，並修改成各自的名稱，GAS 後端會自動新增對應工作表
+  const SHEET_NAME = '公司行號';
+  // ================================================
 
   // ---------- persistence ----------
   const STORE_KEY = 'mailroom:items';
   async function loadItems(){
+    if(GAS_URL){
+      try{
+        const res = await fetch(GAS_URL, {
+          method:'POST',
+          headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action:'load', sheetName: SHEET_NAME })
+        });
+        const data = await res.json();
+        if(data.error) throw new Error(data.error);
+        state.items = Array.isArray(data.items) ? data.items : [];
+      }catch(e){
+        toast('GAS 雲端讀取失敗，請確認 GAS_URL 是否正確：' + e.message, 'error');
+        state.items = seedData();
+      }
+      render();
+      return;
+    }
     try{
       const r = await window.storage.get(STORE_KEY, true);
       state.items = r && r.value ? JSON.parse(r.value) : seedData();
@@ -541,8 +607,37 @@
     render();
   }
   async function saveItems(){
+    if(GAS_URL){
+      try{
+        const res = await fetch(GAS_URL, {
+          method:'POST',
+          headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action:'save', sheetName: SHEET_NAME, items: state.items })
+        });
+        const data = await res.json();
+        if(data.error) throw new Error(data.error);
+      }catch(e){
+        toast('GAS 雲端同步失敗，資料僅保留於本次畫面：' + e.message, 'error');
+      }
+      return;
+    }
     try{ await window.storage.set(STORE_KEY, JSON.stringify(state.items), true); }
     catch(e){ toast('雲端同步失敗，資料僅保留於本次畫面', 'error'); }
+  }
+  async function verifyAdminPin(pin){
+    if(!GAS_URL){ toast('尚未設定 GAS_URL，請先完成後端部署設定', 'error'); return null; }
+    try{
+      const res = await fetch(GAS_URL, {
+        method:'POST',
+        headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action:'login', pin: pin })
+      });
+      const data = await res.json();
+      return data && data.name ? data.name : null;
+    }catch(e){
+      toast('GAS 連線失敗，無法驗證管理員密碼：' + e.message, 'error');
+      return null;
+    }
   }
   function seedData(){ return []; }
 
@@ -611,7 +706,7 @@
   });
 
   // ---------- admin ----------
-  const ADMIN_ACCOUNTS = { '258': '小戴', '000': '代班' };
+  // 注意：管理員密碼已改為由 GAS 後端驗證（Admin 工作表），前端不再儲存明碼，詳見 verifyAdminPin()
   function updateAdminUI(){
     document.getElementById('adminBtn').innerHTML = state.isAdmin
       ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>' + state.adminName + ' 已登入'
@@ -623,6 +718,12 @@
     if(bgBtn) bgBtn.style.display = (state.isAdmin && state.adminName === '小戴') ? 'inline-flex' : 'none';
     const opBtn = document.getElementById('opacityBtn');
     if(opBtn) opBtn.style.display = (state.isAdmin && state.adminName === '小戴') ? 'inline-flex' : 'none';
+    const fullExpBtn = document.getElementById('fullExportBtn');
+    if(fullExpBtn) fullExpBtn.style.display = (state.isAdmin && state.adminName === '小戴') ? 'inline-flex' : 'none';
+    const fullImpBtn = document.getElementById('fullImportBtn');
+    if(fullImpBtn) fullImpBtn.style.display = (state.isAdmin && state.adminName === '小戴') ? 'inline-flex' : 'none';
+    const addBtnEl = document.getElementById('addBtn');
+    if(addBtnEl) addBtnEl.style.display = state.isAdmin ? 'inline-flex' : 'none';
     if(!(state.isAdmin && state.adminName === '小戴')){ hideOpacityHud(); }
     updateUndoBtn();
     render();
@@ -775,8 +876,8 @@
     if(state.pin.length >= 3) return;
     state.pin += k; renderPin();
     if(state.pin.length === 3){
-      setTimeout(()=>{
-        const matchedName = ADMIN_ACCOUNTS[state.pin];
+      setTimeout(async ()=>{
+        const matchedName = await verifyAdminPin(state.pin);
         if(matchedName){
           state.isAdmin = true; state.adminName = matchedName;
           closeOverlay('loginOverlay'); updateAdminUI(); toast(matchedName + ' 登入成功', 'success');
@@ -822,15 +923,17 @@
       delete item.lastModifiedAt;
     }
   }
-  function render(){
+  function getFilteredItems(){
     const q = document.getElementById('searchInput').value.trim().toLowerCase();
     const fType = document.getElementById('filterType').value;
     const fRegion = document.getElementById('filterRegion').value;
     const fTemp = document.getElementById('filterTemp').value;
     const fOwner = document.getElementById('filterOwner').value;
     const fStatus = document.getElementById('filterStatus').value;
+    const fDateFrom = document.getElementById('filterDateFrom').value;
+    const fDateTo = document.getElementById('filterDateTo').value;
 
-    let list = state.items.filter(it=>{
+    return state.items.filter(it=>{
       if(q && !(it.code+it.company+it.recipient).toLowerCase().includes(q)) return false;
       if(fType && it.type !== fType) return false;
       if(fRegion && it.region !== fRegion) return false;
@@ -838,8 +941,13 @@
       if(fOwner && it.owner !== fOwner) return false;
       const st = computeStatus(it);
       if(fStatus && !(fStatus === st || (fStatus==='pending' && st==='overdue'))) return false;
+      if(fDateFrom && (!it.indate || it.indate < fDateFrom)) return false;
+      if(fDateTo && (!it.indate || it.indate > fDateTo)) return false;
       return true;
     }).sort((a,b)=> (b.indate||'').localeCompare(a.indate||''));
+  }
+  function render(){
+    let list = getFilteredItems();
 
     const rows = document.getElementById('rows');
     if(list.length === 0){
@@ -1122,6 +1230,13 @@
 
   ['searchInput'].forEach(id=> document.getElementById(id).addEventListener('input', render));
   ['filterType','filterRegion','filterTemp','filterOwner','filterStatus'].forEach(id=> document.getElementById(id).addEventListener('change', render));
+  ['filterDateFrom','filterDateTo'].forEach(id=> document.getElementById(id).addEventListener('change', render));
+  document.getElementById('filterDateReset').addEventListener('click', ()=>{
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value = '';
+    render();
+    toast('已清除日期篩選，顯示所有日期');
+  });
 
   // ---------- add/edit ----------
   function updateTypeFields(){
@@ -1198,20 +1313,152 @@
   }
 
   // ---------- export ----------
-  document.getElementById('exportBtn').addEventListener('click', ()=>{
-    const headers = ['東西編號','寄件公司','收件人','類型','地區','溫層','性質','狀態','入庫日期','領走日期','領走時間','登記人','最後修改人','最後修改時間'];
-    const rows = state.items.map(it=>[
-      it.code, it.company, it.recipient, it.type, it.region||'', it.tempMode||'', it.owner,
-      computeStatus(it)==='done'?'已領取':computeStatus(it)==='overdue'?'逾期未領':'待領取',
-      it.indate||'', it.date||'', it.time||'', it.creator||'', it.lastModifiedBy||'', it.lastModifiedAt||''
-    ]);
-    const csv = [headers, ...rows].map(r=> r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
-    const blob = new Blob(['\uFEFF'+csv], { type:'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = '郵件包裹登記_' + todayStr() + '.csv'; a.click();
-    URL.revokeObjectURL(url);
-    toast('已匯出 CSV', 'success');
+  document.getElementById('exportBtn').addEventListener('click', async ()=>{
+    if(typeof ExcelJS === 'undefined'){ toast('XLSX 匯出元件載入失敗，請檢查網路連線', 'error'); return; }
+    try{
+      const workbook = new ExcelJS.Workbook();
+      const ws = workbook.addWorksheet('Sheet1', {
+        pageSetup: {
+          orientation: 'landscape', paperSize: 9,
+          margins: { left:0.2362204724409449, right:0.2362204724409449, top:0.1968503937007874, bottom:0.1968503937007874, header:0, footer:0 }
+        }
+      });
+      ws.columns = [{width:7.25},{width:14.5},{width:27.875},{width:33.5},{width:27.125},{width:25.25}];
+      const XLSX_FONT = { name:'新細明體', size:12 };
+      ws.mergeCells('A1:F1');
+      const dateCell = ws.getCell('A1');
+      dateCell.value = new Date();
+      dateCell.numFmt = 'm/d';
+      dateCell.alignment = { horizontal:'center', vertical:'middle' };
+      dateCell.font = XLSX_FONT;
+
+      const headers = ['NO','郵件號碼','收件人','寄件人','內容','簽收'];
+      const headerAligns = ['center','left','left','left','left','center'];
+      headers.forEach((h,i)=>{
+        const c = ws.getCell(2, i+1);
+        c.value = h;
+        c.alignment = { horizontal:headerAligns[i], vertical:'middle' };
+        c.font = XLSX_FONT;
+      });
+
+      const dataAligns = ['center','left','left','left','left','center'];
+      const exportItems = getFilteredItems();
+      exportItems.forEach((it, idx)=>{
+        const r = idx + 3;
+        let mailNo = it.code;
+        if(mailNo !== null && mailNo !== undefined && mailNo !== '' && !isNaN(Number(mailNo))){ mailNo = Number(mailNo); }
+        const rowVals = [idx+1, mailNo, '', it.company || '', '', ''];
+        rowVals.forEach((v,i)=>{
+          const c = ws.getCell(r, i+1);
+          c.value = v;
+          c.alignment = { horizontal:dataAligns[i], vertical:'middle' };
+          c.font = XLSX_FONT;
+        });
+      });
+
+      const lastBorderRow = 2 + exportItems.length + 8;
+      for(let r=1; r<=lastBorderRow; r++){
+        ws.getRow(r).height = 22.5;
+        for(let c=1; c<=6; c++){
+          const cell = ws.getCell(r,c);
+          cell.border = { top:{style:'thin'}, bottom:{style:'thin'}, left:{style:'thin'}, right:{style:'thin'} };
+          if(!cell.font || !cell.font.name){ cell.font = XLSX_FONT; }
+        }
+      }
+      ws.autoFilter = 'A2:F2';
+      ws.pageSetup.printArea = 'A1:F' + lastBorderRow;
+
+      const buf = await workbook.xlsx.writeBuffer();
+      let finalBlob;
+      if(typeof JSZip !== 'undefined'){
+        // 修正工作表預設字型（欄寬計算基準字型），讓欄寬換算與範例（新細明體 12）一致，避免列印時欄位偏窄
+        const zip = await JSZip.loadAsync(buf);
+        const stylesFile = zip.file('xl/styles.xml');
+        if(stylesFile){
+          let stylesXml = await stylesFile.async('string');
+          stylesXml = stylesXml.replace(
+            '<font><color theme="1"/><family val="2"/><scheme val="minor"/><sz val="11"/><name val="Calibri"/></font>',
+            '<font><sz val="12"/><name val="新細明體"/><family val="1"/><charset val="136"/></font>'
+          );
+          zip.file('xl/styles.xml', stylesXml);
+        }
+        finalBlob = await zip.generateAsync({ type:'blob' });
+      } else {
+        finalBlob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      }
+      const url = URL.createObjectURL(finalBlob);
+      const a = document.createElement('a');
+      a.href = url; a.download = '郵件包裹登記_' + todayStr() + '.xlsx'; a.click();
+      URL.revokeObjectURL(url);
+      toast('已匯出 XLSX', 'success');
+    }catch(err){
+      toast('匯出失敗：' + err.message, 'error');
+    }
+  });
+
+  // ---------- 完整資料匯出／匯入（僅限管理員258/小戴） ----------
+  const FULL_EXPORT_HEADERS = ['ID','東西編號','寄件公司','收件人','類型','地區','溫層','公司行號','狀態','入庫日期','領走日期','領走時間','登記人','最後修改人','最後修改時間'];
+  const FULL_FIELD_KEYS = ['id','code','company','recipient','type','region','tempMode','owner','status','indate','date','time','creator','lastModifiedBy','lastModifiedAt'];
+  document.getElementById('fullExportBtn').addEventListener('click', ()=>{
+    if(!(state.isAdmin && state.adminName === '小戴')) return;
+    if(typeof XLSX === 'undefined'){ toast('XLSX 元件載入失敗，請檢查網路連線', 'error'); return; }
+    const aoa = [FULL_EXPORT_HEADERS];
+    getFilteredItems().forEach(it=>{
+      aoa.push(FULL_FIELD_KEYS.map(k => (it[k] !== undefined && it[k] !== null) ? it[k] : ''));
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = FULL_EXPORT_HEADERS.map(()=>({wch:16}));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '完整資料');
+    XLSX.writeFile(wb, '郵件包裹登記_完整備份_' + todayStr() + '.xlsx');
+    toast('已匯出完整資料 XLSX', 'success');
+  });
+  document.getElementById('fullImportBtn').addEventListener('click', ()=>{
+    if(!(state.isAdmin && state.adminName === '小戴')) return;
+    document.getElementById('fullImportFileInput').click();
+  });
+  document.getElementById('fullImportFileInput').addEventListener('change', (e)=>{
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!file) return;
+    if(!(state.isAdmin && state.adminName === '小戴')) return;
+    if(typeof XLSX === 'undefined'){ toast('XLSX 元件載入失敗，請檢查網路連線', 'error'); return; }
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      try{
+        const wb = XLSX.read(ev.target.result, { type:'array', cellDates:false });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:true });
+        if(!rows.length){ toast('匯入的檔案沒有資料', 'error'); return; }
+        const headerRow = rows[0].map(h=>String(h).trim());
+        const colIdx = FULL_EXPORT_HEADERS.map(h => headerRow.indexOf(h));
+        if(colIdx.indexOf(-1) !== -1){ toast('檔案欄位格式不符，請使用「完整匯出 XLSX」產生的檔案格式', 'error'); return; }
+        const importedItems = [];
+        for(let i=1;i<rows.length;i++){
+          const r = rows[i];
+          if(!r || r.every(v=>v==='' || v===undefined || v===null)) continue;
+          const obj = {};
+          FULL_FIELD_KEYS.forEach((k, idx)=>{
+            let v = r[colIdx[idx]];
+            v = (v === undefined || v === null) ? '' : String(v).trim();
+            obj[k] = v;
+          });
+          if(!obj.id) obj.id = uid();
+          importedItems.push(obj);
+        }
+        if(!confirm('確定要匯入嗎？將以檔案中的 ' + importedItems.length + ' 筆資料，取代目前系統中的所有登記資料，此動作可透過「復原上一步」還原。')) return;
+        pushHistory();
+        state.items = importedItems;
+        state.selectedIds.clear();
+        saveItems();
+        render();
+        toast('已匯入 ' + importedItems.length + ' 筆完整資料', 'success');
+      }catch(err){
+        toast('匯入失敗，請確認檔案格式正確', 'error');
+      }
+    };
+    reader.onerror = function(){ toast('讀取檔案失敗', 'error'); };
+    reader.readAsArrayBuffer(file);
   });
 
   // ---------- init ----------
