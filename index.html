@@ -1156,6 +1156,15 @@
   document.getElementById('rows').addEventListener('focusout', (e)=>{
     const field = e.target.dataset && e.target.dataset.field;
     if(!field) return;
+    if(field === 'code'){
+      const row = e.target.closest('.m-row');
+      const it = row ? state.items.find(x=>x.id===row.dataset.id) : null;
+      if(it && isDuplicateCode(e.target.value, it.id)){
+        e.target.value = it.code;
+        e.target.style.borderColor = '';
+        toast('編號重複，已還原為原本的編號', 'error');
+      }
+    }
     historyArmed = true;
   });
   document.getElementById('rows').addEventListener('input', (e)=>{
@@ -1184,6 +1193,12 @@
     const it = state.items.find(x=>x.id===row.dataset.id); if(!it) return;
     const allowed = field === 'status' ? canEditStatus(it) : canFullEdit(it);
     if(!allowed) return;
+    if(field === 'code' && isDuplicateCode(e.target.value, it.id)){
+      e.target.value = it.code;
+      e.target.style.borderColor = '';
+      toast('編號重複，已還原為原本的編號', 'error');
+      return;
+    }
     if(e.target.tagName === 'SELECT' || e.target.type === 'date' || e.target.type === 'time'){
       pushHistory();
     }
