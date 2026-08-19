@@ -1331,6 +1331,22 @@
     tempWrap.style.display = (t === '包裹') ? '' : 'none';
   }
   document.getElementById('f_type').addEventListener('change', updateTypeFields);
+
+  // ---- 東西編號重複檢查（輸入時即時提醒） ----
+  function isDuplicateCode(code){
+    const trimmed = (code || '').trim().toLowerCase();
+    if(!trimmed) return false;
+    return state.items.some(it => it.id !== state.editingId && (it.code || '').trim().toLowerCase() === trimmed);
+  }
+  document.getElementById('f_code').addEventListener('input', (e)=>{
+    if(isDuplicateCode(e.target.value)){
+      toast('此東西編號已重複登記，請勿輸入相同編號', 'error');
+      e.target.style.borderColor = 'var(--danger)';
+    } else {
+      e.target.style.borderColor = '';
+    }
+  });
+
   function openEdit(id){
     if(!state.isAdmin){ toast('請先以管理員登入才能編輯', 'error'); return; }
     state.editingId = id || null;
@@ -1338,6 +1354,7 @@
     document.getElementById('editTitle').textContent = it ? '編輯登記' : '新增登記';
     document.getElementById('editSub').textContent = it ? ('編號 ' + it.code) : '請填寫完整資訊';
     document.getElementById('f_code').value = it ? it.code : '';
+    document.getElementById('f_code').style.borderColor = '';
     document.getElementById('f_company').value = it ? it.company : '';
     document.getElementById('f_recipient').value = it ? it.recipient : '';
     document.getElementById('f_type').value = it ? it.type : '掛號';
@@ -1354,6 +1371,7 @@
     const company = document.getElementById('f_company').value.trim();
     const recipient = document.getElementById('f_recipient').value.trim();
     if(!code || !company || !recipient){ toast('請完整填寫東西編號、寄件公司與收件人', 'error'); return; }
+    if(isDuplicateCode(code)){ toast('此東西編號已重複登記，請勿輸入相同編號', 'error'); return; }
     pushHistory();
     const status = document.getElementById('f_status').value;
     const type = document.getElementById('f_type').value;
