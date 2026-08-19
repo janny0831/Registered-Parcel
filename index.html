@@ -379,6 +379,12 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
           管理員登入
         </button>
+        <select class="icon-btn" id="autoLogoutSelect" style="display:none;" title="設定自動登出時間">
+          <option value="">自動登出：未設定</option>
+          <option value="m1">1 分鐘後自動登出</option>
+          <option value="h8">8 小時後自動登出</option>
+          <option value="h12">12 小時後自動登出</option>
+        </select>
         <button class="icon-btn" id="bgChangeBtn" style="display:none;" title="更換螢幕背景（僅本機顯示）">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           更換背景
@@ -568,7 +574,7 @@
 
 <script>
 (function(){
-  const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
+  const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, autoLogoutAt: null, autoLogoutKey: '', editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
   const HISTORY_LIMIT = 20;
 
   // ====== GAS（Google Apps Script）後端設定 ======
@@ -707,6 +713,68 @@
 
   // ---------- admin ----------
   // 注意：管理員密碼已改為由 GAS 後端驗證（Admin 工作表），前端不再儲存明碼，詳見 verifyAdminPin()
+
+  // ---- 管理員登入狀態持久化（重新整理頁面不登出）與自動登出倒數 ----
+  const ADMIN_SESSION_KEY = 'mailAdminSession_v1';
+  const AUTO_LOGOUT_DURATIONS = { m1: 60*1000, h8: 8*60*60*1000, h12: 12*60*60*1000 };
+  let autoLogoutTimer = null;
+
+  function clearAutoLogoutTimer(){
+    if(autoLogoutTimer){ clearTimeout(autoLogoutTimer); autoLogoutTimer = null; }
+  }
+
+  function saveAdminSession(){
+    try{
+      if(state.isAdmin){
+        sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
+          adminName: state.adminName,
+          logoutAt: state.autoLogoutAt || null,
+          durationKey: state.autoLogoutKey || ''
+        }));
+      } else {
+        sessionStorage.removeItem(ADMIN_SESSION_KEY);
+      }
+    }catch(e){}
+  }
+
+  function doAutoLogout(){
+    state.isAdmin = false; state.adminName = null; state.autoLogoutAt = null; state.autoLogoutKey = '';
+    clearAutoLogoutTimer();
+    saveAdminSession();
+    updateAdminUI();
+    toast('已達自動登出時間，系統已自動登出');
+  }
+
+  function scheduleAutoLogout(durationKey){
+    clearAutoLogoutTimer();
+    const ms = AUTO_LOGOUT_DURATIONS[durationKey];
+    if(!ms){ state.autoLogoutAt = null; state.autoLogoutKey = ''; saveAdminSession(); return; }
+    state.autoLogoutAt = Date.now() + ms;
+    state.autoLogoutKey = durationKey;
+    saveAdminSession();
+    autoLogoutTimer = setTimeout(doAutoLogout, ms);
+  }
+
+  function restoreAdminSession(){
+    try{
+      const raw = sessionStorage.getItem(ADMIN_SESSION_KEY);
+      if(!raw) return;
+      const data = JSON.parse(raw);
+      if(!data || !data.adminName) return;
+      if(data.logoutAt){
+        const remaining = data.logoutAt - Date.now();
+        if(remaining <= 0){ sessionStorage.removeItem(ADMIN_SESSION_KEY); return; }
+        state.isAdmin = true; state.adminName = data.adminName;
+        state.autoLogoutAt = data.logoutAt; state.autoLogoutKey = data.durationKey || '';
+        clearAutoLogoutTimer();
+        autoLogoutTimer = setTimeout(doAutoLogout, remaining);
+      } else {
+        state.isAdmin = true; state.adminName = data.adminName;
+        state.autoLogoutAt = null; state.autoLogoutKey = '';
+      }
+    }catch(e){}
+  }
+
   function updateAdminUI(){
     document.getElementById('adminBtn').innerHTML = state.isAdmin
       ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>' + state.adminName + ' 已登入'
@@ -714,6 +782,12 @@
     document.getElementById('adminBtn').classList.toggle('on', state.isAdmin);
     document.getElementById('bulkBar').style.display = state.isAdmin ? 'flex' : 'none';
     if(!state.isAdmin){ state.selectedIds.clear(); state.history = []; }
+    const autoLogoutSel = document.getElementById('autoLogoutSelect');
+    if(autoLogoutSel){
+      autoLogoutSel.style.display = state.isAdmin ? 'inline-flex' : 'none';
+      autoLogoutSel.value = state.isAdmin ? (state.autoLogoutKey || '') : '';
+    }
+    if(!state.isAdmin){ clearAutoLogoutTimer(); }
     const bgBtn = document.getElementById('bgChangeBtn');
     if(bgBtn) bgBtn.style.display = (state.isAdmin && state.adminName === '小戴') ? 'inline-flex' : 'none';
     const opBtn = document.getElementById('opacityBtn');
@@ -861,7 +935,7 @@
   loadUiOpacity();
 
   document.getElementById('adminBtn').addEventListener('click', ()=>{
-    if(state.isAdmin){ state.isAdmin = false; state.adminName = null; updateAdminUI(); toast('已登出管理員模式'); return; }
+    if(state.isAdmin){ state.isAdmin = false; state.adminName = null; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); updateAdminUI(); toast('已登出管理員模式'); return; }
     openOverlay('loginOverlay');
   });
   function renderPin(){
@@ -872,20 +946,30 @@
     const btn = e.target.closest('button'); if(!btn) return;
     const k = btn.dataset.k;
     if(k === 'back'){ state.pin = state.pin.slice(0,-1); renderPin(); return; }
-    if(k === 'logout'){ state.isAdmin = false; state.adminName = null; state.pin=''; renderPin(); updateAdminUI(); closeOverlay('loginOverlay'); toast('已登出'); return; }
+    if(k === 'logout'){ state.isAdmin = false; state.adminName = null; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); state.pin=''; renderPin(); updateAdminUI(); closeOverlay('loginOverlay'); toast('已登出'); return; }
     if(state.pin.length >= 3) return;
     state.pin += k; renderPin();
     if(state.pin.length === 3){
       setTimeout(async ()=>{
         const matchedName = await verifyAdminPin(state.pin);
         if(matchedName){
-          state.isAdmin = true; state.adminName = matchedName;
+          state.isAdmin = true; state.adminName = matchedName; state.autoLogoutAt = null; state.autoLogoutKey = '';
+          saveAdminSession();
           closeOverlay('loginOverlay'); updateAdminUI(); toast(matchedName + ' 登入成功', 'success');
         } else {
           toast('密碼錯誤', 'error');
         }
         state.pin=''; renderPin();
       }, 150);
+    }
+  });
+
+  document.getElementById('autoLogoutSelect').addEventListener('change', (e)=>{
+    if(!state.isAdmin) return;
+    const key = e.target.value;
+    scheduleAutoLogout(key);
+    if(key && AUTO_LOGOUT_DURATIONS[key]){
+      toast('已設定自動登出時間');
     }
   });
 
@@ -1468,6 +1552,7 @@
     resizeTimer = setTimeout(adjustRowsHeight, 200);
   });
 
+  restoreAdminSession();
   applyTheme(); applyDevice(); updateAdminUI();
   loadItems();
 })();
