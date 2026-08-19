@@ -1164,6 +1164,15 @@
     const row = e.target.closest('.m-row'); if(!row) return;
     const it = state.items.find(x=>x.id===row.dataset.id); if(!it) return;
     if(!canFullEdit(it)) return;
+    if(field === 'code'){
+      if(isDuplicateCode(e.target.value, it.id)){
+        toast('此東西編號已重複登記，請勿輸入相同編號', 'error');
+        e.target.style.borderColor = 'var(--danger)';
+        return;
+      } else {
+        e.target.style.borderColor = '';
+      }
+    }
     it[field] = e.target.value;
     stampModification(it);
     scheduleInlineSave();
@@ -1333,10 +1342,11 @@
   document.getElementById('f_type').addEventListener('change', updateTypeFields);
 
   // ---- 東西編號重複檢查（輸入時即時提醒） ----
-  function isDuplicateCode(code){
+  function isDuplicateCode(code, excludeId){
     const trimmed = (code || '').trim().toLowerCase();
     if(!trimmed) return false;
-    return state.items.some(it => it.id !== state.editingId && (it.code || '').trim().toLowerCase() === trimmed);
+    const skipId = excludeId !== undefined ? excludeId : state.editingId;
+    return state.items.some(it => it.id !== skipId && (it.code || '').trim().toLowerCase() === trimmed);
   }
   document.getElementById('f_code').addEventListener('input', (e)=>{
     if(isDuplicateCode(e.target.value)){
