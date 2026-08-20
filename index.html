@@ -188,6 +188,11 @@
   .mini-btn:hover{color:var(--signal); border-color:var(--signal); transform:translateY(-2px) rotate(-4deg);}
   .mini-btn.del:hover{color:var(--danger); border-color:var(--danger);}
   .mini-btn svg{width:15px;height:15px;}
+  .mini-btn.pay-neutral{color:var(--fg-muted); border-color:var(--line);}
+  .mini-btn.pay-red{color:#fff; background:var(--danger); border-color:var(--danger);}
+  .mini-btn.pay-red:hover{color:#fff; background:var(--danger); border-color:var(--danger); opacity:.85;}
+  .mini-btn.pay-green{color:#04231C; background:var(--signal); border-color:var(--signal);}
+  .mini-btn.pay-green:hover{color:#04231C; background:var(--signal); border-color:var(--signal); opacity:.85;}
   .empty-state{padding:60px 20px; text-align:center; color:var(--fg-muted); font-size:15px;}
   .empty-state .stub{width:64px;height:64px;margin:0 auto 14px; opacity:.5;}
   .creator-chip{
@@ -414,6 +419,7 @@
         <option value="掛號">掛號</option>
         <option value="包裹">包裹</option>
         <option value="文件">文件</option>
+        <option value="寄放">寄放</option>
       </select>
       <select class="filter" id="filterRegion">
         <option value="">全部地區</option>
@@ -433,6 +439,7 @@
         <option value="生技">生技</option>
         <option value="先進智能">先進智能</option>
         <option value="哈伯西">哈伯西</option>
+        <option value="代付金額">代付金額</option>
       </select>
       <select class="filter" id="filterStatus">
         <option value="">全部狀態</option>
@@ -522,7 +529,7 @@
     <div class="field-row">
       <div class="field">
         <label>類型</label>
-        <select id="f_type"><option value="掛號">掛號</option><option value="包裹">包裹</option><option value="文件">文件</option></select>
+        <select id="f_type"><option value="掛號">掛號</option><option value="包裹">包裹</option><option value="文件">文件</option><option value="寄放">寄放</option></select>
       </div>
       <div class="field" id="regionFieldWrap" style="display:none">
         <label>地區</label>
@@ -534,7 +541,7 @@
       </div>
       <div class="field">
         <label>公司行號</label>
-        <select id="f_owner"><option value="私人">私人</option><option value="大量">大量</option><option value="生技">生技</option><option value="先進智能">先進智能</option><option value="哈伯西">哈伯西</option></select>
+        <select id="f_owner"><option value="私人">私人</option><option value="大量">大量</option><option value="生技">生技</option><option value="先進智能">先進智能</option><option value="哈伯西">哈伯西</option><option value="代付金額">代付金額</option></select>
       </div>
     </div>
     <div class="field">
@@ -544,6 +551,31 @@
     <div class="modal-actions">
       <button class="fab ghost" data-close>取消</button>
       <button class="fab" id="saveBtn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Pay Advance (代付金額) Modal ===== -->
+<div class="overlay" id="payOverlay">
+  <div class="modal">
+    <button class="close" data-close>&times;</button>
+    <h2>代付金額登記</h2>
+    <div class="sub" id="paySub">請填寫代付金額資訊</div>
+    <div class="field">
+      <label>代付金額</label>
+      <input type="number" id="pay_advance" placeholder="例：500" min="0" step="1">
+    </div>
+    <div class="field">
+      <label>對方實際給的金額</label>
+      <input type="number" id="pay_actual" placeholder="例：1000" min="0" step="1">
+    </div>
+    <div class="field">
+      <label>我需要找對方多少錢</label>
+      <input type="text" id="pay_change" readonly placeholder="—" style="opacity:.75; cursor:default;">
+    </div>
+    <div class="modal-actions">
+      <button class="fab ghost" data-close>取消</button>
+      <button class="fab" id="paySaveBtn">儲存</button>
     </div>
   </div>
 </div>
@@ -1242,7 +1274,7 @@
       ? `<input class="inline-input" data-field="recipient" value="${escapeAttr(it.recipient)}">`
       : escapeHtml(it.recipient);
     const type = full
-      ? `<select class="inline-select badge ${typeCls}" data-field="type"><option value="掛號" ${it.type==='掛號'?'selected':''}>掛號</option><option value="包裹" ${it.type==='包裹'?'selected':''}>包裹</option><option value="文件" ${it.type==='文件'?'selected':''}>文件</option></select>`
+      ? `<select class="inline-select badge ${typeCls}" data-field="type"><option value="掛號" ${it.type==='掛號'?'selected':''}>掛號</option><option value="包裹" ${it.type==='包裹'?'selected':''}>包裹</option><option value="文件" ${it.type==='文件'?'selected':''}>文件</option><option value="寄放" ${it.type==='寄放'?'selected':''}>寄放</option></select>`
       : `<span class="badge ${typeCls}">${it.type}</span>`;
     const regionApplicable = (it.type === '包裹' || it.type === '文件');
     const tempApplicable = (it.type === '包裹');
@@ -1256,7 +1288,7 @@
           ? `<select class="inline-select badge temp-badge" data-field="tempMode"><option value="常溫" ${it.tempMode==='常溫'?'selected':''}>常溫</option><option value="冷藏" ${it.tempMode==='冷藏'?'selected':''}>冷藏</option><option value="冷凍" ${it.tempMode==='冷凍'?'selected':''}>冷凍</option></select>`
           : `<span class="badge temp-badge">${escapeHtml(it.tempMode||'常溫')}</span>`)
       : `<span class="cell-dash">—</span>`;
-    const ownerOptions = ['私人','大量','生技','先進智能','哈伯西'];
+    const ownerOptions = ['私人','大量','生技','先進智能','哈伯西','代付金額'];
     const owner = full
       ? `<select class="inline-select badge owner-badge" data-field="owner">${ownerOptions.map(o=>`<option value="${o}" ${it.owner===o?'selected':''}>${o}</option>`).join('')}</select>`
       : `<span class="badge owner-badge">${escapeHtml(it.owner)}</span>`;
@@ -1284,7 +1316,14 @@
     const lockIcon = locked
       ? `<div class="lock-badge" title="此筆由「${escapeHtml(it.creator||'未知')}」登記，僅小戴可以編輯或刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>`
       : '';
-    return { code, company, recipient, type, region, tempMode, owner, pick, status, creatorChip, creatorGroup, modNote, checkbox, lockIcon, full };
+    let payIcon = '';
+    if(state.isAdmin && it.owner === '代付金額'){
+      const hasAdvance = it.advanceAmount !== undefined && it.advanceAmount !== null && it.advanceAmount !== '' && Number(it.advanceAmount) > 0;
+      const hasActual = it.actualAmount !== undefined && it.actualAmount !== null && it.actualAmount !== '' && Number(it.actualAmount) > 0;
+      const payCls = hasActual ? 'pay-green' : (hasAdvance ? 'pay-red' : 'pay-neutral');
+      payIcon = `<button class="mini-btn pay-btn ${payCls}" data-id="${it.id}" title="代付金額登記"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 6.5v11M9 9.2c0-1.5 1.3-2.7 3-2.7s3 1 3 2.4c0 1.7-1.5 2.2-3 2.6-1.6.4-3 .9-3 2.6 0 1.4 1.3 2.4 3 2.4s3-1.2 3-2.7"/></svg></button>`;
+    }
+    return { code, company, recipient, type, region, tempMode, owner, pick, status, creatorChip, creatorGroup, modNote, checkbox, lockIcon, payIcon, full };
   }
 
   function rowTemplateDesktop(it){
@@ -1303,6 +1342,7 @@
       <div data-col="人員">${c.creatorGroup}</div>
       <div class="row-actions">
         ${c.lockIcon}
+        ${c.payIcon}
         ${c.checkbox}
         ${c.full ? `<button class="mini-btn del" title="刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>` : ''}
       </div>
@@ -1329,6 +1369,7 @@
         <div class="mrow-pick">${(it.date||it.time) ? [it.date, it.time].filter(Boolean).join(' ') : '入庫 '+(it.indate||'—')}${c.modNote ? `<div class="mrow-modnote">${c.modNote.replace(' · ','')}</div>` : ''}</div>
         <div class="row-actions">
           ${c.lockIcon}
+          ${c.payIcon}
           ${c.checkbox}
           ${c.full ? `<button class="mini-btn del" title="刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>` : ''}
         </div>
@@ -1426,6 +1467,47 @@
     closeOverlay('editOverlay');
     render();
   });
+
+  // ---- 代付金額登記彈窗 ----
+  let payEditingId = null;
+  function computePayChange(){
+    const advance = parseFloat(document.getElementById('pay_advance').value);
+    const actual = parseFloat(document.getElementById('pay_actual').value);
+    const changeEl = document.getElementById('pay_change');
+    if(isNaN(advance) || isNaN(actual)){ changeEl.value = ''; return; }
+    const diff = actual - advance;
+    if(diff > 0){ changeEl.value = '需找對方 ' + diff + ' 元'; }
+    else if(diff < 0){ changeEl.value = '對方還需再給 ' + Math.abs(diff) + ' 元'; }
+    else { changeEl.value = '剛好，不需找零'; }
+  }
+  document.getElementById('pay_advance').addEventListener('input', computePayChange);
+  document.getElementById('pay_actual').addEventListener('input', computePayChange);
+  document.getElementById('rows').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.pay-btn'); if(!btn) return;
+    if(!state.isAdmin) return;
+    const it = state.items.find(x=>x.id===btn.dataset.id); if(!it) return;
+    payEditingId = it.id;
+    document.getElementById('paySub').textContent = `${it.company} → ${it.recipient}`;
+    document.getElementById('pay_advance').value = (it.advanceAmount !== undefined && it.advanceAmount !== null) ? it.advanceAmount : '';
+    document.getElementById('pay_actual').value = (it.actualAmount !== undefined && it.actualAmount !== null) ? it.actualAmount : '';
+    computePayChange();
+    openOverlay('payOverlay');
+  });
+  document.getElementById('paySaveBtn').addEventListener('click', async ()=>{
+    if(!payEditingId) return;
+    const it = state.items.find(x=>x.id===payEditingId); if(!it) return;
+    const advanceVal = document.getElementById('pay_advance').value;
+    const actualVal = document.getElementById('pay_actual').value;
+    pushHistory();
+    it.advanceAmount = advanceVal === '' ? '' : Number(advanceVal);
+    it.actualAmount = actualVal === '' ? '' : Number(actualVal);
+    stampModification(it);
+    await saveItems();
+    closeOverlay('payOverlay');
+    render();
+    toast('已更新代付金額紀錄', 'success');
+  });
+
   async function removeItem(id){
     if(!state.isAdmin) return;
     const it = state.items.find(x=>x.id===id);
@@ -1524,8 +1606,8 @@
   });
 
   // ---------- 完整資料匯出／匯入（僅限管理員258/小戴） ----------
-  const FULL_EXPORT_HEADERS = ['ID','東西編號','寄件公司','收件人','類型','地區','溫層','公司行號','狀態','入庫日期','領走日期','領走時間','登記人','最後修改人','最後修改時間'];
-  const FULL_FIELD_KEYS = ['id','code','company','recipient','type','region','tempMode','owner','status','indate','date','time','creator','lastModifiedBy','lastModifiedAt'];
+  const FULL_EXPORT_HEADERS = ['ID','東西編號','寄件公司','收件人','類型','地區','溫層','公司行號','代付金額','對方實際給的金額','狀態','入庫日期','領走日期','領走時間','登記人','最後修改人','最後修改時間'];
+  const FULL_FIELD_KEYS = ['id','code','company','recipient','type','region','tempMode','owner','advanceAmount','actualAmount','status','indate','date','time','creator','lastModifiedBy','lastModifiedAt'];
   document.getElementById('fullExportBtn').addEventListener('click', ()=>{
     if(!(state.isAdmin && state.adminName === '小戴')) return;
     if(typeof XLSX === 'undefined'){ toast('XLSX 元件載入失敗，請檢查網路連線', 'error'); return; }
