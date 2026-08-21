@@ -304,6 +304,15 @@
   }
   .scan-status.error{color:var(--danger); background:rgba(255,84,112,.08);}
   .scan-status.success{color:var(--signal); background:rgba(45,217,181,.08);}
+  .ai-fill-btn{
+    display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+    margin-bottom:16px; padding:11px 14px; border-radius:12px; border:1px solid transparent;
+    background:linear-gradient(135deg, rgba(45,217,181,.16), rgba(28,142,118,.16));
+    color:var(--signal); font-family:var(--font-body); font-size:13.5px; font-weight:700;
+    cursor:pointer; transition:all .2s ease;
+  }
+  .ai-fill-btn:hover{background:linear-gradient(135deg, rgba(45,217,181,.26), rgba(28,142,118,.26)); transform:translateY(-1px);}
+  .ai-fill-btn svg{width:18px; height:18px; flex:none;}
   .field-row .field{flex:1 1 100px; min-width:90px;}
   .modal-actions{display:flex; gap:10px; margin-top:20px;}
   .modal-actions .fab{flex:1; justify-content:center;}
@@ -537,6 +546,10 @@
     <button class="close" data-close>&times;</button>
     <h2 id="editTitle">新增登記</h2>
     <div class="sub" id="editSub">請填寫完整資訊</div>
+    <button type="button" class="ai-fill-btn" id="aiFillBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.4L18 9l-4.2 1.6L12 15l-1.8-4.4L6 9l4.2-1.6L12 3z"/><path d="M19 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
+      <span>拍照自動帶入寄件公司 / 收件人 / 類型</span>
+    </button>
     <div class="field">
       <label>東西編號 / 追蹤號碼</label>
       <div class="field-input-row">
@@ -630,6 +643,31 @@
       <img id="scanPreviewImg" alt="預覽">
     </div>
     <div class="scan-status" id="scanStatus">請選擇圖片或直接拍照</div>
+  </div>
+</div>
+
+<!-- ===== AI Photo Recognition Modal ===== -->
+<div class="overlay" id="aiFillOverlay">
+  <div class="modal">
+    <button class="close" data-close>&times;</button>
+    <h2>AI 拍照辨識</h2>
+    <div class="sub">拍照或選擇圖片，自動判讀寄件公司、收件人與類型</div>
+    <div class="scan-upload-options">
+      <button type="button" class="scan-upload-btn" id="aiGalleryBtn">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>
+        <span>從相簿選擇</span>
+      </button>
+      <button type="button" class="scan-upload-btn" id="aiCameraBtn">
+        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z"/></svg>
+        <span>拍照</span>
+      </button>
+    </div>
+    <input type="file" id="aiGalleryInput" accept="image/*" style="display:none;">
+    <input type="file" id="aiCameraInput" accept="image/*" capture="environment" style="display:none;">
+    <div class="scan-preview-wrap" id="aiPreviewWrap">
+      <img id="aiPreviewImg" alt="預覽">
+    </div>
+    <div class="scan-status" id="aiStatus">請選擇圖片或直接拍照</div>
   </div>
 </div>
 
@@ -2003,6 +2041,103 @@
       }
       ctx.putImageData(imgData, 0, 0);
       return canvas;
+    }
+  })();
+
+  // ---------- AI 拍照辨識（寄件公司 / 收件人 / 類型 自動帶入） ----------
+  (function(){
+    const aiFillBtn = document.getElementById('aiFillBtn');
+    const aiGalleryBtn = document.getElementById('aiGalleryBtn');
+    const aiCameraBtn = document.getElementById('aiCameraBtn');
+    const aiGalleryInput = document.getElementById('aiGalleryInput');
+    const aiCameraInput = document.getElementById('aiCameraInput');
+    const aiPreviewWrap = document.getElementById('aiPreviewWrap');
+    const aiPreviewImg = document.getElementById('aiPreviewImg');
+    const aiStatus = document.getElementById('aiStatus');
+
+    aiFillBtn.addEventListener('click', ()=>{
+      aiPreviewWrap.style.display = 'none';
+      aiPreviewImg.src = '';
+      setAiStatus('請選擇圖片或直接拍照', '');
+      openOverlay('aiFillOverlay');
+    });
+    aiGalleryBtn.addEventListener('click', ()=> aiGalleryInput.click());
+    aiCameraBtn.addEventListener('click', ()=> aiCameraInput.click());
+    aiGalleryInput.addEventListener('change', e=>{
+      if(e.target.files.length) handleAiFile(e.target.files[0]);
+      e.target.value = '';
+    });
+    aiCameraInput.addEventListener('change', e=>{
+      if(e.target.files.length) handleAiFile(e.target.files[0]);
+      e.target.value = '';
+    });
+
+    function setAiStatus(msg, kind){
+      aiStatus.textContent = msg;
+      aiStatus.classList.remove('error', 'success');
+      if(kind) aiStatus.classList.add(kind);
+    }
+
+    function handleAiFile(file){
+      if(!file.type.startsWith('image/')){
+        setAiStatus('請選擇圖片檔案（PNG / JPG / WEBP）。', 'error');
+        return;
+      }
+      setAiStatus('讀取圖片中...', '');
+      const fr = new FileReader();
+      fr.onload = ()=>{
+        const dataUrl = fr.result;
+        aiPreviewImg.src = dataUrl;
+        aiPreviewWrap.style.display = 'block';
+        setAiStatus('AI 辨識中，請稍候...', '');
+        callAiExtract(dataUrl, file.type);
+      };
+      fr.onerror = ()=>{ setAiStatus('無法讀取這個圖片檔案，請換一張圖片再試一次。', 'error'); };
+      fr.readAsDataURL(file);
+    }
+
+    async function callAiExtract(dataUrl, mediaType){
+      if(!GAS_URL){ setAiStatus('尚未設定 GAS_URL，請先完成後端部署設定。', 'error'); return; }
+      const base64Image = dataUrl.split(',')[1] || '';
+      try{
+        const res = await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'aiExtractInfo', image: base64Image, mediaType: mediaType })
+        });
+        const data = await res.json();
+        if(data.error){ setAiStatus(data.error, 'error'); return; }
+        applyAiResult(data);
+      }catch(e){
+        setAiStatus('AI 辨識連線失敗：' + e.message, 'error');
+      }
+    }
+
+    function applyAiResult(data){
+      const filled = [];
+      if(data.company){
+        document.getElementById('f_company').value = data.company;
+        filled.push('寄件公司');
+      }
+      if(data.recipient){
+        document.getElementById('f_recipient').value = data.recipient;
+        filled.push('收件人');
+      }
+      if(data.type){
+        const typeSelect = document.getElementById('f_type');
+        typeSelect.value = data.type;
+        typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        filled.push('類型');
+      }
+      if(filled.length === 0){
+        setAiStatus('這張照片沒有辨識出可用的資訊，請換一張更清楚的照片再試一次。', 'error');
+        return;
+      }
+      setAiStatus('已自動帶入：' + filled.join('、'), 'success');
+      setTimeout(()=>{
+        closeOverlay('aiFillOverlay');
+        toast('已自動帶入：' + filled.join('、') + '，請確認內容無誤', 'success');
+      }, 700);
     }
   })();
 
