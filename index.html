@@ -287,6 +287,7 @@
   .field-input-row{display:flex; gap:8px; align-items:stretch;}
   .field-input-row input{flex:1; min-width:0;}
   .field-input-row .scan-btn{flex:none; width:44px; height:auto;}
+  .field-input-row .qty-select{flex:none; width:76px; padding:12px 6px; text-align:center;}
   .scan-upload-options{display:flex; gap:10px; margin-bottom:14px;}
   .scan-upload-btn{
     flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;
@@ -404,6 +405,10 @@
         </div>
       </div>
       <div class="topbar-controls">
+        <button class="fab" id="addBtn" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+          新增登記
+        </button>
         <button class="icon-btn" id="deviceToggle" title="切換裝置尺寸">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           電腦
@@ -513,10 +518,6 @@
     </div>
 
     <div class="fab-row">
-      <button class="fab" id="addBtn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
-        新增登記
-      </button>
       <button class="fab ghost" id="undoBtn" style="display:none" disabled title="復原上一步操作">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14l-4-4 4-4"/><path d="M5 10h9a5 5 0 010 10h-1"/></svg>
         <span id="undoBtnLabel">復原上一步</span>
@@ -561,7 +562,21 @@
     </div>
     <div class="field">
       <label>寄件公司名稱</label>
-      <input type="text" id="f_company" placeholder="例：DELTA 台達">
+      <div class="field-input-row">
+        <input type="text" id="f_company" placeholder="例：DELTA 台達">
+        <select id="f_companyQty" class="qty-select" title="數量（選填，預設為 1 件，不會顯示在名稱後面）">
+          <option value="">數量</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+        </select>
+      </div>
     </div>
     <div class="field">
       <label>收件人名字</label>
@@ -1335,6 +1350,26 @@
       it.date = todayStr(); it.time = nowTimeStr();
       toast('已自動帶入領取時間', 'success');
     }
+    // 狀態欄位同步：如果這筆項目目前有被勾選，且勾選數量不只一筆，
+    // 就把同樣的狀態同步套用到其他所有被勾選的項目（各自尊重狀態編輯權限）
+    if(field === 'status' && state.selectedIds.has(it.id) && state.selectedIds.size > 1){
+      const newStatus = e.target.value;
+      let syncedCount = 0;
+      state.selectedIds.forEach(otherId=>{
+        if(otherId === it.id) return;
+        const otherIt = state.items.find(x=>x.id===otherId);
+        if(!otherIt || !canEditStatus(otherIt)) return;
+        otherIt.status = newStatus;
+        if(newStatus === 'done' && !otherIt.date && !otherIt.time){
+          otherIt.date = todayStr(); otherIt.time = nowTimeStr();
+        }
+        stampModification(otherIt);
+        syncedCount++;
+      });
+      if(syncedCount > 0){
+        toast('已同步套用狀態至其他 ' + syncedCount + ' 筆已勾選項目', 'success');
+      }
+    }
     stampModification(it);
     saveItems();
     render();
@@ -1513,6 +1548,7 @@
     document.getElementById('f_code').value = it ? it.code : '';
     document.getElementById('f_code').style.borderColor = '';
     document.getElementById('f_company').value = it ? it.company : '';
+    document.getElementById('f_companyQty').value = '';
     document.getElementById('f_recipient').value = it ? it.recipient : '';
     document.getElementById('f_type').value = it ? it.type : '掛號';
     document.getElementById('f_region').value = it ? (it.region || '國內') : '國內';
@@ -1525,7 +1561,9 @@
   document.getElementById('addBtn').addEventListener('click', ()=> openEdit(null));
   document.getElementById('saveBtn').addEventListener('click', async ()=>{
     const code = document.getElementById('f_code').value.trim();
-    const company = document.getElementById('f_company').value.trim();
+    let company = document.getElementById('f_company').value.trim();
+    const companyQty = document.getElementById('f_companyQty').value;
+    if(companyQty && company){ company = company + '×' + companyQty + '件'; }
     const recipient = document.getElementById('f_recipient').value.trim();
     if(!code || !company || !recipient){ toast('請完整填寫東西編號、寄件公司與收件人', 'error'); return; }
     if(isDuplicateCode(code)){ toast('此東西編號已重複登記，請勿輸入相同編號', 'error'); return; }
