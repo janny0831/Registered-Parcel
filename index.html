@@ -548,7 +548,7 @@
     <div class="sub" id="editSub">請填寫完整資訊</div>
     <button type="button" class="ai-fill-btn" id="aiFillBtn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.4L18 9l-4.2 1.6L12 15l-1.8-4.4L6 9l4.2-1.6L12 3z"/><path d="M19 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
-      <span>拍照自動帶入寄件公司 / 收件人 / 類型</span>
+      <span>拍照自動帶入東西編號 / 寄件公司 / 收件人 / 類型</span>
     </button>
     <div class="field">
       <label>東西編號 / 追蹤號碼</label>
@@ -651,7 +651,7 @@
   <div class="modal">
     <button class="close" data-close>&times;</button>
     <h2>AI 拍照辨識</h2>
-    <div class="sub">拍照或選擇圖片，自動判讀寄件公司、收件人與類型</div>
+    <div class="sub">拍照或選擇圖片，自動判讀東西編號、寄件公司、收件人與類型</div>
     <div class="scan-upload-options">
       <button type="button" class="scan-upload-btn" id="aiGalleryBtn">
         <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/></svg>
@@ -2115,6 +2115,12 @@
 
     function applyAiResult(data){
       const filled = [];
+      if(data.code){
+        const codeInput = document.getElementById('f_code');
+        codeInput.value = data.code;
+        codeInput.dispatchEvent(new Event('input', { bubbles: true }));
+        filled.push('東西編號');
+      }
       if(data.company){
         document.getElementById('f_company').value = data.company;
         filled.push('寄件公司');
