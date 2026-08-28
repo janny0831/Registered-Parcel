@@ -346,7 +346,7 @@
   ::-webkit-scrollbar{width:8px; height:8px;}
   ::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
 
-  /* ---- 介面透明度調整（僅管理員258/小戴，僅本機生效） ---- */
+  /* ---- 介面透明度調整（僅最高權限管理員（小戴/小編），僅本機生效） ---- */
   #app{opacity:var(--ui-opacity,1); transition:opacity .18s ease;}
   .opacity-hud{
     position:fixed; right:16px; top:50%; transform:translateY(-50%) scale(.9);
@@ -713,6 +713,14 @@
 <script>
 (function(){
   const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, autoLogoutAt: null, autoLogoutKey: '', editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
+
+  // ---------- 管理員權限分級 ----------
+  // 最高權限：可使用背景/透明度調整、完整匯出匯入、以及編輯或刪除「任何人」登記的資料
+  // 部分權限：只能編輯或刪除「自己」登記的資料，看不到最高權限限定的功能按鍵
+  const FULL_ADMIN_NAMES = ['小戴', '小編'];
+  const PARTIAL_ADMIN_NAMES = ['代班', '晚班'];
+  function isFullAdmin(name){ return FULL_ADMIN_NAMES.indexOf(name) !== -1; }
+  function isPartialAdmin(name){ return PARTIAL_ADMIN_NAMES.indexOf(name) !== -1; }
   const HISTORY_LIMIT = 20;
 
   // ====== GAS（Google Apps Script）後端設定 ======
@@ -927,21 +935,21 @@
     }
     if(!state.isAdmin){ clearAutoLogoutTimer(); }
     const bgBtn = document.getElementById('bgChangeBtn');
-    if(bgBtn) bgBtn.style.display = (state.isAdmin && state.adminName === '小戴') ? 'inline-flex' : 'none';
+    if(bgBtn) bgBtn.style.display = (state.isAdmin && isFullAdmin(state.adminName)) ? 'inline-flex' : 'none';
     const opBtn = document.getElementById('opacityBtn');
-    if(opBtn) opBtn.style.display = (state.isAdmin && state.adminName === '小戴') ? 'inline-flex' : 'none';
+    if(opBtn) opBtn.style.display = (state.isAdmin && isFullAdmin(state.adminName)) ? 'inline-flex' : 'none';
     const fullExpBtn = document.getElementById('fullExportBtn');
-    if(fullExpBtn) fullExpBtn.style.display = (state.isAdmin && state.adminName === '小戴') ? 'inline-flex' : 'none';
+    if(fullExpBtn) fullExpBtn.style.display = (state.isAdmin && isFullAdmin(state.adminName)) ? 'inline-flex' : 'none';
     const fullImpBtn = document.getElementById('fullImportBtn');
-    if(fullImpBtn) fullImpBtn.style.display = (state.isAdmin && state.adminName === '小戴') ? 'inline-flex' : 'none';
+    if(fullImpBtn) fullImpBtn.style.display = (state.isAdmin && isFullAdmin(state.adminName)) ? 'inline-flex' : 'none';
     const addBtnEl = document.getElementById('addBtn');
     if(addBtnEl) addBtnEl.style.display = state.isAdmin ? 'inline-flex' : 'none';
-    if(!(state.isAdmin && state.adminName === '小戴')){ hideOpacityHud(); }
+    if(!(state.isAdmin && isFullAdmin(state.adminName))){ hideOpacityHud(); }
     updateUndoBtn();
     render();
   }
 
-  // ---------- custom local background (僅限管理員258/小戴，僅儲存在本機該手機瀏覽器中) ----------
+  // ---------- custom local background (僅限最高權限管理員（小戴/小編），僅儲存在本機該手機瀏覽器中) ----------
   const BG_LOCAL_KEY = 'mailroom:localBgImage:258';
   function applyCustomBackground(){
     try{
@@ -956,7 +964,7 @@
     }catch(e){}
   }
   document.getElementById('bgChangeBtn').addEventListener('click', ()=>{
-    if(!(state.isAdmin && state.adminName === '小戴')) return;
+    if(!(state.isAdmin && isFullAdmin(state.adminName))) return;
     document.getElementById('bgFileInput').click();
   });
   document.getElementById('bgFileInput').addEventListener('change', (e)=>{
@@ -991,7 +999,7 @@
   });
   applyCustomBackground();
 
-  // ---------- 介面透明度調整（僅限管理員258/小戴，僅儲存在本機該手機瀏覽器中） ----------
+  // ---------- 介面透明度調整（僅限最高權限管理員（小戴/小編），僅儲存在本機該手機瀏覽器中） ----------
   const UI_OPACITY_LOCAL_KEY = 'mailroom:localUiOpacity:258';
   const UI_OPACITY_MIN = 0.15;
   let opacityHideTimer = null;
@@ -1017,7 +1025,7 @@
     try{ localStorage.setItem(UI_OPACITY_LOCAL_KEY, String(v)); }catch(e){}
   }
   function showOpacityHud(){
-    if(!(state.isAdmin && state.adminName === '小戴')) return;
+    if(!(state.isAdmin && isFullAdmin(state.adminName))) return;
     const hud = document.getElementById('opacityHud');
     hud.classList.add('show');
     clearTimeout(opacityHideTimer);
@@ -1045,7 +1053,7 @@
       return UI_OPACITY_MIN + ratio * (1 - UI_OPACITY_MIN);
     }
     function onDown(ev){
-      if(!(state.isAdmin && state.adminName === '小戴')) return;
+      if(!(state.isAdmin && isFullAdmin(state.adminName))) return;
       dragging = true;
       clearTimeout(opacityHideTimer);
       const v = applyUiOpacity(valueFromEvent(ev));
@@ -1129,8 +1137,8 @@
   }
   function canFullEdit(item){
     if(!state.isAdmin) return false;
-    if(state.adminName === '小戴') return true;
-    if(state.adminName === '代班') return item.creator === '代班';
+    if(isFullAdmin(state.adminName)) return true;
+    if(isPartialAdmin(state.adminName)) return item.creator === state.adminName;
     return false;
   }
   function canEditStatus(item){
@@ -1380,6 +1388,8 @@
   function charFor(name){
     if(name === '小戴') return { ch: '戴', cls: 'c-dai' };
     if(name === '代班') return { ch: '代', cls: 'c-ban' };
+    if(name === '小編') return { ch: '編', cls: 'c-dai' };
+    if(name === '晚班') return { ch: '晚', cls: 'c-ban' };
     return null;
   }
   function buildCells(it){
@@ -1440,7 +1450,7 @@
       : '';
     const locked = state.isAdmin && !full && !statusEditable;
     const lockIcon = locked
-      ? `<div class="lock-badge" title="此筆由「${escapeHtml(it.creator||'未知')}」登記，僅小戴可以編輯或刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>`
+      ? `<div class="lock-badge" title="此筆由「${escapeHtml(it.creator||'未知')}」登記，僅最高權限管理員（${FULL_ADMIN_NAMES.join('、')}）或登記人本人可以編輯或刪除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>`
       : '';
     let payIcon = '';
     if(state.isAdmin && it.owner === '代付金額'){
@@ -1734,11 +1744,11 @@
     }
   });
 
-  // ---------- 完整資料匯出／匯入（僅限管理員258/小戴） ----------
+  // ---------- 完整資料匯出／匯入（僅限最高權限管理員：小戴/小編） ----------
   const FULL_EXPORT_HEADERS = ['ID','東西編號','寄件公司','收件人','類型','地區','溫層','公司行號','代付金額','對方實際給的金額','狀態','入庫日期','領走日期','領走時間','登記人','最後修改人','最後修改時間'];
   const FULL_FIELD_KEYS = ['id','code','company','recipient','type','region','tempMode','owner','advanceAmount','actualAmount','status','indate','date','time','creator','lastModifiedBy','lastModifiedAt'];
   document.getElementById('fullExportBtn').addEventListener('click', ()=>{
-    if(!(state.isAdmin && state.adminName === '小戴')) return;
+    if(!(state.isAdmin && isFullAdmin(state.adminName))) return;
     if(typeof XLSX === 'undefined'){ toast('XLSX 元件載入失敗，請檢查網路連線', 'error'); return; }
     const aoa = [FULL_EXPORT_HEADERS];
     getFilteredItems().forEach(it=>{
@@ -1752,14 +1762,14 @@
     toast('已匯出完整資料 XLSX', 'success');
   });
   document.getElementById('fullImportBtn').addEventListener('click', ()=>{
-    if(!(state.isAdmin && state.adminName === '小戴')) return;
+    if(!(state.isAdmin && isFullAdmin(state.adminName))) return;
     document.getElementById('fullImportFileInput').click();
   });
   document.getElementById('fullImportFileInput').addEventListener('change', (e)=>{
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if(!file) return;
-    if(!(state.isAdmin && state.adminName === '小戴')) return;
+    if(!(state.isAdmin && isFullAdmin(state.adminName))) return;
     if(typeof XLSX === 'undefined'){ toast('XLSX 元件載入失敗，請檢查網路連線', 'error'); return; }
     const reader = new FileReader();
     reader.onload = function(ev){
