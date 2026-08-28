@@ -477,6 +477,7 @@
         <option value="先進智能">先進智能</option>
         <option value="哈伯西">哈伯西</option>
         <option value="代付金額">代付金額</option>
+        <option value="大量母子公司">大量/生技/先進智能</option>
       </select>
       <select class="filter" id="filterStatus">
         <option value="">全部狀態</option>
@@ -1169,7 +1170,11 @@
       if(fType && it.type !== fType) return false;
       if(fRegion && it.region !== fRegion) return false;
       if(fTemp && it.tempMode !== fTemp) return false;
-      if(fOwner && it.owner !== fOwner) return false;
+      if(fOwner === '大量母子公司'){
+        if(['大量','生技','先進智能'].indexOf(it.owner) === -1) return false;
+      } else if(fOwner && it.owner !== fOwner){
+        return false;
+      }
       const st = computeStatus(it);
       if(fStatus && !(fStatus === st || (fStatus==='pending' && st==='overdue'))) return false;
       if(fDateFrom && (!it.indate || it.indate < fDateFrom)) return false;
@@ -1359,6 +1364,9 @@
       it.date = todayStr(); it.time = nowTimeStr();
       toast('已自動帶入領取時間', 'success');
     }
+    if(field === 'status' && e.target.value === 'pending'){
+      it.date = ''; it.time = '';
+    }
     // 狀態欄位同步：如果這筆項目目前有被勾選，且勾選數量不只一筆，
     // 就把同樣的狀態同步套用到其他所有被勾選的項目（各自尊重狀態編輯權限）
     if(field === 'status' && state.selectedIds.has(it.id) && state.selectedIds.size > 1){
@@ -1371,6 +1379,9 @@
         otherIt.status = newStatus;
         if(newStatus === 'done' && !otherIt.date && !otherIt.time){
           otherIt.date = todayStr(); otherIt.time = nowTimeStr();
+        }
+        if(newStatus === 'pending'){
+          otherIt.date = ''; otherIt.time = '';
         }
         stampModification(otherIt);
         syncedCount++;
@@ -1599,6 +1610,9 @@
       const prev = state.items[idx];
       if(status === 'done' && prev.status !== 'done' && !prev.date && !prev.time){
         payload.date = todayStr(); payload.time = nowTimeStr();
+      }
+      if(status === 'pending' && prev.status === 'done'){
+        payload.date = ''; payload.time = '';
       }
       state.items[idx] = { ...prev, ...payload };
       toast('已更新登記', 'success');
