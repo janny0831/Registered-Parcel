@@ -606,6 +606,7 @@
     </div>
     <div class="modal-actions">
       <button class="fab ghost" data-close>取消</button>
+      <button class="fab ghost" id="saveNextBtn" style="display:none">下一筆</button>
       <button class="fab" id="saveBtn">儲存</button>
     </div>
   </div>
@@ -1549,10 +1550,7 @@
     }
   });
 
-  function openEdit(id){
-    if(!state.isAdmin){ toast('請先以管理員登入才能編輯', 'error'); return; }
-    state.editingId = id || null;
-    const it = id ? state.items.find(x=>x.id===id) : null;
+  function resetEditFormFields(it){
     document.getElementById('editTitle').textContent = it ? '編輯登記' : '新增登記';
     document.getElementById('editSub').textContent = it ? ('編號 ' + it.code) : '請填寫完整資訊';
     document.getElementById('f_code').value = it ? it.code : '';
@@ -1566,17 +1564,25 @@
     document.getElementById('f_owner').value = it ? it.owner : '私人';
     document.getElementById('f_status').value = it ? it.status : 'pending';
     updateTypeFields();
+  }
+  function openEdit(id){
+    if(!state.isAdmin){ toast('請先以管理員登入才能編輯', 'error'); return; }
+    state.editingId = id || null;
+    const it = id ? state.items.find(x=>x.id===id) : null;
+    resetEditFormFields(it);
+    // 「下一筆」只在新增流程才有意義，編輯既有登記時隱藏
+    document.getElementById('saveNextBtn').style.display = it ? 'none' : 'inline-flex';
     openOverlay('editOverlay');
   }
   document.getElementById('addBtn').addEventListener('click', ()=> openEdit(null));
-  document.getElementById('saveBtn').addEventListener('click', async ()=>{
+  async function performEditSave(){
     const code = document.getElementById('f_code').value.trim();
     let company = document.getElementById('f_company').value.trim();
     const companyQty = document.getElementById('f_companyQty').value;
     if(companyQty && company){ company = company + '×' + companyQty + '件'; }
     const recipient = document.getElementById('f_recipient').value.trim();
-    if(!code || !company || !recipient){ toast('請完整填寫東西編號、寄件公司與收件人', 'error'); return; }
-    if(isDuplicateCode(code)){ toast('此東西編號已重複登記，請勿輸入相同編號', 'error'); return; }
+    if(!code || !company || !recipient){ toast('請完整填寫東西編號、寄件公司與收件人', 'error'); return false; }
+    if(isDuplicateCode(code)){ toast('此東西編號已重複登記，請勿輸入相同編號', 'error'); return false; }
     pushHistory();
     const status = document.getElementById('f_status').value;
     const type = document.getElementById('f_type').value;
@@ -1603,8 +1609,21 @@
       toast('已新增登記', 'success');
     }
     await saveItems();
-    closeOverlay('editOverlay');
     render();
+    return true;
+  }
+  document.getElementById('saveBtn').addEventListener('click', async ()=>{
+    const ok = await performEditSave();
+    if(!ok) return;
+    closeOverlay('editOverlay');
+  });
+  document.getElementById('saveNextBtn').addEventListener('click', async ()=>{
+    const ok = await performEditSave();
+    if(!ok) return;
+    // 停留在新增登記畫面，清空表單準備輸入下一筆
+    state.editingId = null;
+    resetEditFormFields(null);
+    document.getElementById('f_code').focus();
   });
 
   // ---- 代付金額登記彈窗 ----
