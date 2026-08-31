@@ -1734,6 +1734,7 @@
           c.value = v;
           c.alignment = { horizontal:dataAligns[i], vertical:'middle' };
           c.font = XLSX_FONT;
+          if(i === 1 && typeof v === 'number'){ c.numFmt = '0'; }
         });
       });
 
