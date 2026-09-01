@@ -719,8 +719,8 @@
   // ---------- 管理員權限分級 ----------
   // 最高權限：可使用背景/透明度調整、完整匯出匯入、以及編輯或刪除「任何人」登記的資料
   // 部分權限：只能編輯或刪除「自己」登記的資料，看不到最高權限限定的功能按鍵
-  const FULL_ADMIN_NAMES = ['小戴', '小編'];
-  const PARTIAL_ADMIN_NAMES = ['代班', '晚班'];
+  const FULL_ADMIN_NAMES = ['小戴', '小編', '晚班'];
+  const PARTIAL_ADMIN_NAMES = ['代班'];
   function isFullAdmin(name){ return FULL_ADMIN_NAMES.indexOf(name) !== -1; }
   function isPartialAdmin(name){ return PARTIAL_ADMIN_NAMES.indexOf(name) !== -1; }
   const HISTORY_LIMIT = 20;
