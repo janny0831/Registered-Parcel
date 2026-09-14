@@ -714,7 +714,7 @@
 
 <script>
 (function(){
-  const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, autoLogoutAt: null, autoLogoutKey: '', editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
+  const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, canFullImport: false, autoLogoutAt: null, autoLogoutKey: '', editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
 
   // ---------- 管理員權限分級 ----------
   // 最高權限：可使用背景/透明度調整、完整匯出匯入、以及編輯或刪除「任何人」登記的資料
@@ -787,7 +787,7 @@
         body: JSON.stringify({ action:'login', pin: pin })
       });
       const data = await res.json();
-      return data && data.name ? data.name : null;
+      return data && data.name ? { name: data.name, fullImport: !!data.fullImport } : null;
     }catch(e){
       toast('GAS 連線失敗，無法驗證管理員密碼：' + e.message, 'error');
       return null;
@@ -876,6 +876,7 @@
       if(state.isAdmin){
         sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
           adminName: state.adminName,
+          canFullImport: !!state.canFullImport,
           logoutAt: state.autoLogoutAt || null,
           durationKey: state.autoLogoutKey || ''
         }));
@@ -886,7 +887,7 @@
   }
 
   function doAutoLogout(){
-    state.isAdmin = false; state.adminName = null; state.autoLogoutAt = null; state.autoLogoutKey = '';
+    state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.autoLogoutAt = null; state.autoLogoutKey = '';
     clearAutoLogoutTimer();
     saveAdminSession();
     updateAdminUI();
@@ -912,12 +913,12 @@
       if(data.logoutAt){
         const remaining = data.logoutAt - Date.now();
         if(remaining <= 0){ sessionStorage.removeItem(ADMIN_SESSION_KEY); return; }
-        state.isAdmin = true; state.adminName = data.adminName;
+        state.isAdmin = true; state.adminName = data.adminName; state.canFullImport = !!data.canFullImport;
         state.autoLogoutAt = data.logoutAt; state.autoLogoutKey = data.durationKey || '';
         clearAutoLogoutTimer();
         autoLogoutTimer = setTimeout(doAutoLogout, remaining);
       } else {
-        state.isAdmin = true; state.adminName = data.adminName;
+        state.isAdmin = true; state.adminName = data.adminName; state.canFullImport = !!data.canFullImport;
         state.autoLogoutAt = null; state.autoLogoutKey = '';
       }
     }catch(e){}
@@ -941,9 +942,9 @@
     const opBtn = document.getElementById('opacityBtn');
     if(opBtn) opBtn.style.display = (state.isAdmin && isFullAdmin(state.adminName)) ? 'inline-flex' : 'none';
     const fullExpBtn = document.getElementById('fullExportBtn');
-    if(fullExpBtn) fullExpBtn.style.display = (state.isAdmin && isFullAdmin(state.adminName)) ? 'inline-flex' : 'none';
+    if(fullExpBtn) fullExpBtn.style.display = state.isAdmin ? 'inline-flex' : 'none';
     const fullImpBtn = document.getElementById('fullImportBtn');
-    if(fullImpBtn) fullImpBtn.style.display = (state.isAdmin && isFullAdmin(state.adminName)) ? 'inline-flex' : 'none';
+    if(fullImpBtn) fullImpBtn.style.display = (state.isAdmin && state.canFullImport) ? 'inline-flex' : 'none';
     const addBtnEl = document.getElementById('addBtn');
     if(addBtnEl) addBtnEl.style.display = state.isAdmin ? 'inline-flex' : 'none';
     if(!(state.isAdmin && isFullAdmin(state.adminName))){ hideOpacityHud(); }
@@ -1083,7 +1084,7 @@
   loadUiOpacity();
 
   document.getElementById('adminBtn').addEventListener('click', ()=>{
-    if(state.isAdmin){ state.isAdmin = false; state.adminName = null; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); updateAdminUI(); toast('已登出管理員模式'); return; }
+    if(state.isAdmin){ state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); updateAdminUI(); toast('已登出管理員模式'); return; }
     openOverlay('loginOverlay');
   });
   function renderPin(){
@@ -1094,16 +1095,16 @@
     const btn = e.target.closest('button'); if(!btn) return;
     const k = btn.dataset.k;
     if(k === 'back'){ state.pin = state.pin.slice(0,-1); renderPin(); return; }
-    if(k === 'logout'){ state.isAdmin = false; state.adminName = null; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); state.pin=''; renderPin(); updateAdminUI(); closeOverlay('loginOverlay'); toast('已登出'); return; }
+    if(k === 'logout'){ state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); state.pin=''; renderPin(); updateAdminUI(); closeOverlay('loginOverlay'); toast('已登出'); return; }
     if(state.pin.length >= 3) return;
     state.pin += k; renderPin();
     if(state.pin.length === 3){
       setTimeout(async ()=>{
-        const matchedName = await verifyAdminPin(state.pin);
-        if(matchedName){
-          state.isAdmin = true; state.adminName = matchedName; state.autoLogoutAt = null; state.autoLogoutKey = '';
+        const matched = await verifyAdminPin(state.pin);
+        if(matched){
+          state.isAdmin = true; state.adminName = matched.name; state.canFullImport = !!matched.fullImport; state.autoLogoutAt = null; state.autoLogoutKey = '';
           saveAdminSession();
-          closeOverlay('loginOverlay'); updateAdminUI(); toast(matchedName + ' 登入成功', 'success');
+          closeOverlay('loginOverlay'); updateAdminUI(); toast(matched.name + ' 登入成功', 'success');
         } else {
           toast('密碼錯誤', 'error');
         }
@@ -1782,7 +1783,7 @@
   const FULL_EXPORT_HEADERS = ['ID','東西編號','寄件公司','收件人','類型','地區','溫層','公司行號','代付金額','對方實際給的金額','狀態','入庫日期','領走日期','領走時間','登記人','最後修改人','最後修改時間'];
   const FULL_FIELD_KEYS = ['id','code','company','recipient','type','region','tempMode','owner','advanceAmount','actualAmount','status','indate','date','time','creator','lastModifiedBy','lastModifiedAt'];
   document.getElementById('fullExportBtn').addEventListener('click', ()=>{
-    if(!(state.isAdmin && isFullAdmin(state.adminName))) return;
+    if(!state.isAdmin) return;
     if(typeof XLSX === 'undefined'){ toast('XLSX 元件載入失敗，請檢查網路連線', 'error'); return; }
     const aoa = [FULL_EXPORT_HEADERS];
     getFilteredItems().forEach(it=>{
@@ -1796,14 +1797,14 @@
     toast('已匯出完整資料 XLSX', 'success');
   });
   document.getElementById('fullImportBtn').addEventListener('click', ()=>{
-    if(!(state.isAdmin && isFullAdmin(state.adminName))) return;
+    if(!(state.isAdmin && state.canFullImport)) return;
     document.getElementById('fullImportFileInput').click();
   });
   document.getElementById('fullImportFileInput').addEventListener('change', (e)=>{
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if(!file) return;
-    if(!(state.isAdmin && isFullAdmin(state.adminName))) return;
+    if(!(state.isAdmin && state.canFullImport)) return;
     if(typeof XLSX === 'undefined'){ toast('XLSX 元件載入失敗，請檢查網路連線', 'error'); return; }
     const reader = new FileReader();
     reader.onload = function(ev){
