@@ -263,6 +263,24 @@
 
   footer.note{margin-top:26px; text-align:center; font-size:11.5px; color:var(--fg-muted); font-family:var(--font-mono); letter-spacing:.04em;}
 
+
+  /* ---------- 課長：備份資料 ---------- */
+  #backupBtn{background:#F2B84B; color:#3A2200; border-color:transparent; box-shadow:none;}
+  #backupBtn:hover{background:#F2B84B; color:#3A2200; opacity:.86; border-color:transparent;}
+  .bk-modal{max-width:1180px !important;}
+  .bk-bar{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px;}
+  .bk-bar input, .bk-bar select{background:rgba(var(--paper-tone),.05); border:1px solid var(--line); border-radius:10px; padding:9px 11px; color:var(--fg); font-size:14px; outline:none;}
+  .bk-bar input[type=search]{flex:1; min-width:180px;}
+  .bk-wrap{overflow:auto; max-height:42vh; border:1px solid var(--line); border-radius:12px;}
+  .bk-table{border-collapse:collapse; width:100%; font-size:13px; white-space:nowrap;}
+  .bk-table th, .bk-table td{padding:7px 10px; border-bottom:1px solid var(--line); text-align:left;}
+  .bk-table th{position:sticky; top:0; background:var(--panel); z-index:1; font-size:12px; color:var(--fg-muted);}
+  .bk-note{font-size:12px; color:var(--fg-muted); margin:8px 0;}
+  .bk-del{margin-top:16px; padding:14px; border:1px solid var(--danger); border-radius:14px;}
+  .bk-del h3{margin:0 0 4px; font-size:15px; color:var(--danger);}
+  .bk-warn{font-size:12.5px; color:var(--danger); margin:8px 0; line-height:1.6;}
+  .bk-preview{font-size:13.5px; margin:10px 0; line-height:1.7;}
+
   /* ---------- modal ---------- */
   .overlay{position:fixed; inset:0; background:rgba(0,0,0,.55); backdrop-filter:blur(6px); z-index:50; display:none; align-items:center; justify-content:center; padding:20px;}
   .overlay.show{display:flex; animation:fadeIn .25s ease;}
@@ -535,6 +553,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V9m0 0l-4 4m4-4l4 4M4 3h16"/></svg>
         完整匯入 XLSX
       </button>
+      <button class="fab ghost" id="backupBtn" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+        備份資料
+      </button>
       <input type="file" id="fullImportFileInput" accept=".xlsx,.xls" style="display:none">
     </div>
 
@@ -688,6 +710,39 @@
   </div>
 </div>
 
+<!-- ===== 備份資料（僅課長） ===== -->
+<div class="overlay" id="backupOverlay">
+  <div class="modal bk-modal">
+    <button class="close" data-close>&times;</button>
+    <h2>備份資料</h2>
+    <div class="sub">唯讀檢視 · 僅「課長」可見 · 備份不會被每月歸零或一般刪除影響</div>
+    <div class="bk-bar">
+      <input type="search" id="bkSearch" placeholder="搜尋 編號 / 寄件公司 / 收件人 / 登記人…">
+      <select id="bkSheet"><option value="">全部據點</option></select>
+      <input type="month" id="bkMonth" title="依入庫月份篩選">
+      <button class="fab ghost" id="bkReload" type="button">重新載入</button>
+    </div>
+    <div class="bk-wrap"><table class="bk-table"><thead id="bkHead"></thead><tbody id="bkBody"></tbody></table></div>
+    <div class="bk-note" id="bkInfo"></div>
+
+    <div class="bk-del">
+      <h3>刪除備份資料（依入庫日期）</h3>
+      <div class="bk-warn">⚠ 刪除後，系統內無法還原。刪除前會先自動「累積封存」到試算表的「刪除封存」分頁，並自動下載一份 XLSX 到你的電腦；兩者都成功才會刪除。</div>
+      <div class="bk-bar">
+        <input type="month" id="bkDelMonth" title="選整個月份">
+        <span style="align-self:center;font-size:13px">或日期範圍</span>
+        <input type="date" id="bkDelFrom"><span style="align-self:center">~</span><input type="date" id="bkDelTo">
+        <button class="fab ghost" id="bkDelHalf" type="button">半年以前（含）</button>
+      </div>
+      <div class="bk-bar">
+        <button class="fab ghost" id="bkDelPreview" type="button">預覽要刪除的資料</button>
+        <button class="fab" id="bkDelGo" type="button" style="display:none;background:var(--danger);border-color:var(--danger);color:#fff">確認刪除</button>
+      </div>
+      <div class="bk-preview" id="bkDelPreviewBox"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== Admin Login Modal ===== -->
 <div class="overlay" id="loginOverlay">
   <div class="modal" style="max-width:340px;">
@@ -714,12 +769,12 @@
 
 <script>
 (function(){
-  const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, canFullImport: false, autoLogoutAt: null, autoLogoutKey: '', editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
+  const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, canFullImport: false, canBackup: false, backupPin: '', autoLogoutAt: null, autoLogoutKey: '', editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
 
   // ---------- 管理員權限分級 ----------
   // 最高權限：可使用背景/透明度調整、完整匯出匯入、以及編輯或刪除「任何人」登記的資料
   // 部分權限：只能編輯或刪除「自己」登記的資料，看不到最高權限限定的功能按鍵
-  const FULL_ADMIN_NAMES = ['小戴', '小編', '晚班'];
+  const FULL_ADMIN_NAMES = ['小戴', '小編', '晚班', '課長'];
   const PARTIAL_ADMIN_NAMES = ['代班'];
   function isFullAdmin(name){ return FULL_ADMIN_NAMES.indexOf(name) !== -1; }
   function isPartialAdmin(name){ return PARTIAL_ADMIN_NAMES.indexOf(name) !== -1; }
@@ -787,7 +842,7 @@
         body: JSON.stringify({ action:'login', pin: pin })
       });
       const data = await res.json();
-      return data && data.name ? { name: data.name, fullImport: !!data.fullImport } : null;
+      return data && data.name ? { name: data.name, fullImport: !!data.fullImport, backup: !!data.backup } : null;
     }catch(e){
       toast('GAS 連線失敗，無法驗證管理員密碼：' + e.message, 'error');
       return null;
@@ -877,6 +932,8 @@
         sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
           adminName: state.adminName,
           canFullImport: !!state.canFullImport,
+          canBackup: !!state.canBackup,
+          backupPin: state.canBackup ? (state.backupPin || '') : '',
           logoutAt: state.autoLogoutAt || null,
           durationKey: state.autoLogoutKey || ''
         }));
@@ -887,7 +944,7 @@
   }
 
   function doAutoLogout(){
-    state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.autoLogoutAt = null; state.autoLogoutKey = '';
+    state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.canBackup = false; state.backupPin = ''; state.autoLogoutAt = null; state.autoLogoutKey = '';
     clearAutoLogoutTimer();
     saveAdminSession();
     updateAdminUI();
@@ -913,12 +970,12 @@
       if(data.logoutAt){
         const remaining = data.logoutAt - Date.now();
         if(remaining <= 0){ sessionStorage.removeItem(ADMIN_SESSION_KEY); return; }
-        state.isAdmin = true; state.adminName = data.adminName; state.canFullImport = !!data.canFullImport;
+        state.isAdmin = true; state.adminName = data.adminName; state.canFullImport = !!data.canFullImport; state.canBackup = !!data.canBackup; state.backupPin = data.canBackup ? (data.backupPin || '') : '';
         state.autoLogoutAt = data.logoutAt; state.autoLogoutKey = data.durationKey || '';
         clearAutoLogoutTimer();
         autoLogoutTimer = setTimeout(doAutoLogout, remaining);
       } else {
-        state.isAdmin = true; state.adminName = data.adminName; state.canFullImport = !!data.canFullImport;
+        state.isAdmin = true; state.adminName = data.adminName; state.canFullImport = !!data.canFullImport; state.canBackup = !!data.canBackup; state.backupPin = data.canBackup ? (data.backupPin || '') : '';
         state.autoLogoutAt = null; state.autoLogoutKey = '';
       }
     }catch(e){}
@@ -945,6 +1002,9 @@
     if(fullExpBtn) fullExpBtn.style.display = state.isAdmin ? 'inline-flex' : 'none';
     const fullImpBtn = document.getElementById('fullImportBtn');
     if(fullImpBtn) fullImpBtn.style.display = (state.isAdmin && state.canFullImport) ? 'inline-flex' : 'none';
+    const bkBtn = document.getElementById('backupBtn');
+    if(bkBtn) bkBtn.style.display = (state.isAdmin && state.canBackup) ? 'inline-flex' : 'none';
+    if(!(state.isAdmin && state.canBackup)) closeOverlay('backupOverlay');
     const addBtnEl = document.getElementById('addBtn');
     if(addBtnEl) addBtnEl.style.display = state.isAdmin ? 'inline-flex' : 'none';
     if(!(state.isAdmin && isFullAdmin(state.adminName))){ hideOpacityHud(); }
@@ -1084,7 +1144,7 @@
   loadUiOpacity();
 
   document.getElementById('adminBtn').addEventListener('click', ()=>{
-    if(state.isAdmin){ state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); updateAdminUI(); toast('已登出管理員模式'); return; }
+    if(state.isAdmin){ state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.canBackup = false; state.backupPin = ''; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); updateAdminUI(); toast('已登出管理員模式'); return; }
     openOverlay('loginOverlay');
   });
   function renderPin(){
@@ -1095,14 +1155,14 @@
     const btn = e.target.closest('button'); if(!btn) return;
     const k = btn.dataset.k;
     if(k === 'back'){ state.pin = state.pin.slice(0,-1); renderPin(); return; }
-    if(k === 'logout'){ state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); state.pin=''; renderPin(); updateAdminUI(); closeOverlay('loginOverlay'); toast('已登出'); return; }
+    if(k === 'logout'){ state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.canBackup = false; state.backupPin = ''; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); state.pin=''; renderPin(); updateAdminUI(); closeOverlay('loginOverlay'); toast('已登出'); return; }
     if(state.pin.length >= 3) return;
     state.pin += k; renderPin();
     if(state.pin.length === 3){
       setTimeout(async ()=>{
         const matched = await verifyAdminPin(state.pin);
         if(matched){
-          state.isAdmin = true; state.adminName = matched.name; state.canFullImport = !!matched.fullImport; state.autoLogoutAt = null; state.autoLogoutKey = '';
+          state.isAdmin = true; state.adminName = matched.name; state.canFullImport = !!matched.fullImport; state.canBackup = !!matched.backup; state.backupPin = matched.backup ? state.pin : ''; state.autoLogoutAt = null; state.autoLogoutKey = '';
           saveAdminSession();
           closeOverlay('loginOverlay'); updateAdminUI(); toast(matched.name + ' 登入成功', 'success');
         } else {
@@ -1403,6 +1463,7 @@
     if(name === '代班') return { ch: '代', cls: 'c-ban' };
     if(name === '小編') return { ch: '編', cls: 'c-dai' };
     if(name === '晚班') return { ch: '晚', cls: 'c-ban' };
+    if(name === '課長') return { ch: '課', cls: 'c-dai' };
     return null;
   }
   function buildCells(it){
@@ -1782,6 +1843,123 @@
   // ---------- 完整資料匯出／匯入（僅限最高權限管理員：小戴/小編） ----------
   const FULL_EXPORT_HEADERS = ['ID','東西編號','寄件公司','收件人','類型','地區','溫層','公司行號','代付金額','對方實際給的金額','狀態','入庫日期','領走日期','領走時間','登記人','最後修改人','最後修改時間'];
   const FULL_FIELD_KEYS = ['id','code','company','recipient','type','region','tempMode','owner','advanceAmount','actualAmount','status','indate','date','time','creator','lastModifiedBy','lastModifiedAt'];
+
+  // ---------- 課長：備份資料（唯讀檢視 + 安全刪除） ----------
+  const BK_HEAD = ['備份時間','來源工作表'].concat(FULL_EXPORT_HEADERS);
+  const BK_KEYS = ['備份時間','來源工作表'].concat(FULL_FIELD_KEYS);
+  let bkRows = [], bkPreviewCount = null, bkPreviewParams = null;
+  async function bkCall(action, extra){
+    const res = await fetch(GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ action: action, pin: state.backupPin }, extra || {})) });
+    const txt = await res.text();
+    let data;
+    try{ data = JSON.parse(txt); }catch(e){ throw new Error('後端回應異常（可能是 Google 暫時故障），請稍後再試'); }
+    if(data && data.error) throw new Error(data.error);
+    return data;
+  }
+  function bkStatusText(v){ return v === 'done' ? '已領取' : v === 'pending' ? '待領取' : v; }
+  function bkFiltered(){
+    const q = document.getElementById('bkSearch').value.trim().toLowerCase();
+    const sh = document.getElementById('bkSheet').value;
+    const mo = document.getElementById('bkMonth').value;
+    return bkRows.filter(r=>{
+      if(sh && r['來源工作表'] !== sh) return false;
+      if(mo && String(r.indate||'').slice(0,7) !== mo) return false;
+      if(q && !BK_KEYS.some(k => String(r[k]||'').toLowerCase().indexOf(q) !== -1)) return false;
+      return true;
+    });
+  }
+  function bkRender(){
+    document.getElementById('bkHead').innerHTML = '<tr>' + BK_HEAD.map(h=>'<th>'+escapeHtml(h)+'</th>').join('') + '</tr>';
+    const rows = bkFiltered().slice().sort((a,b)=> String(b.indate||'').localeCompare(String(a.indate||'')));
+    const shown = rows.slice(0, 500);
+    document.getElementById('bkBody').innerHTML = shown.map(r=>'<tr>' + BK_KEYS.map(k=>'<td>'+escapeHtml(k==='status'?bkStatusText(r[k]):String(r[k]||''))+'</td>').join('') + '</tr>').join('');
+    document.getElementById('bkInfo').textContent = '符合 ' + rows.length + ' 筆（備份共 ' + bkRows.length + ' 筆）' + (rows.length > 500 ? '，畫面僅顯示前 500 筆，請用搜尋/月份縮小範圍' : '');
+  }
+  async function bkLoad(){
+    document.getElementById('bkInfo').textContent = '載入中…';
+    try{
+      const d = await bkCall('backupLoad');
+      bkRows = d.rows || [];
+      const sel = document.getElementById('bkSheet'), cur = sel.value;
+      const names = Array.from(new Set(bkRows.map(r=>r['來源工作表']))).filter(Boolean);
+      sel.innerHTML = '<option value="">全部據點</option>' + names.map(n=>'<option>'+escapeHtml(n)+'</option>').join('');
+      sel.value = names.indexOf(cur) !== -1 ? cur : '';
+      bkRender();
+    }catch(e){ document.getElementById('bkInfo').textContent = ''; toast(e.message, 'error'); }
+  }
+  function bkResetPreview(){
+    bkPreviewCount = null; bkPreviewParams = null;
+    document.getElementById('bkDelGo').style.display = 'none';
+    document.getElementById('bkDelPreviewBox').innerHTML = '';
+  }
+  function bkDelParams(){
+    const from = document.getElementById('bkDelFrom').value, to = document.getElementById('bkDelTo').value;
+    if(!from || !to){ toast('請先選擇月份或日期範圍', 'error'); return null; }
+    if(from > to){ toast('起始日不可大於結束日', 'error'); return null; }
+    return { from: from, to: to, sheetName: document.getElementById('bkSheet').value };
+  }
+  document.getElementById('backupBtn').addEventListener('click', ()=>{
+    if(!(state.isAdmin && state.canBackup)) return;
+    bkResetPreview(); openOverlay('backupOverlay'); bkLoad();
+  });
+  ['bkSearch','bkSheet','bkMonth'].forEach(id=> document.getElementById(id).addEventListener('input', bkRender));
+  document.getElementById('bkSheet').addEventListener('change', bkResetPreview);
+  document.getElementById('bkReload').addEventListener('click', bkLoad);
+  document.getElementById('bkDelMonth').addEventListener('change', (e)=>{
+    const m = e.target.value; if(!m) return;
+    const y = +m.slice(0,4), mo = +m.slice(5,7);
+    const last = new Date(y, mo, 0).getDate();
+    document.getElementById('bkDelFrom').value = m + '-01';
+    document.getElementById('bkDelTo').value = m + '-' + String(last).padStart(2,'0');
+    bkResetPreview();
+  });
+  ['bkDelFrom','bkDelTo'].forEach(id=> document.getElementById(id).addEventListener('change', bkResetPreview));
+  document.getElementById('bkDelHalf').addEventListener('click', ()=>{
+    const d = new Date(); d.setMonth(d.getMonth() - 6);
+    document.getElementById('bkDelFrom').value = '2000-01-01';
+    document.getElementById('bkDelTo').value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    document.getElementById('bkDelMonth').value = '';
+    bkResetPreview();
+  });
+  document.getElementById('bkDelPreview').addEventListener('click', async ()=>{
+    const pr = bkDelParams(); if(!pr) return;
+    const box = document.getElementById('bkDelPreviewBox');
+    box.textContent = '計算中…';
+    try{
+      const d = await bkCall('backupDeletePreview', pr);
+      bkPreviewCount = d.count; bkPreviewParams = pr;
+      if(!d.count){ box.textContent = '此範圍沒有任何備份資料，無需刪除。'; return; }
+      box.innerHTML = '範圍：<b>' + escapeHtml(d.range) + '</b><br>將刪除 <b style="color:var(--danger)">' + d.count + '</b> 筆（備份共 ' + d.total + ' 筆）<br>' +
+        '預覽前 ' + d.sample.length + ' 筆：' + d.sample.map(x=>escapeHtml(x.indate+' '+x.company+'→'+x.recipient)).join('；');
+      document.getElementById('bkDelGo').style.display = 'inline-flex';
+    }catch(e){ box.textContent = ''; toast(e.message, 'error'); }
+  });
+  document.getElementById('bkDelGo').addEventListener('click', async ()=>{
+    if(bkPreviewCount === null || !bkPreviewParams) return;
+    const pr = bkPreviewParams;
+    if(!confirm('即將刪除 ' + bkPreviewCount + ' 筆備份資料（' + pr.from + ' ~ ' + pr.to + '）。\n刪除後系統內無法還原。\n\n按「確定」繼續。')) return;
+    if(prompt('第二次確認：請輸入「刪除」兩個字') !== '刪除'){ toast('已取消刪除', 'error'); return; }
+    const btn = document.getElementById('bkDelGo'); btn.disabled = true;
+    try{
+      // 1) 先在本機下載 XLSX（用最新的備份內容，筆數必須與預覽一致）
+      await bkLoad();
+      const targets = bkRows.filter(r => String(r.indate||'') >= pr.from && String(r.indate||'') <= pr.to && (!pr.sheetName || r['來源工作表'] === pr.sheetName));
+      if(targets.length !== bkPreviewCount){ throw new Error('資料在預覽後有變動（預覽 ' + bkPreviewCount + ' 筆、現在 ' + targets.length + ' 筆），已中止，請重新預覽'); }
+      if(typeof XLSX === 'undefined') throw new Error('XLSX 元件載入失敗，已中止刪除');
+      const aoa = [BK_HEAD].concat(targets.map(r => BK_KEYS.map(k => r[k] === undefined ? '' : String(r[k]))));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = BK_HEAD.map(()=>({wch:16}));
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '已刪除備份');
+      XLSX.writeFile(wb, '備份刪除前下載_' + pr.from + '_' + pr.to + '.xlsx');
+      // 2) 後端：先封存、再刪除、寫紀錄
+      const d = await bkCall('backupDelete', Object.assign({ confirm:true }, pr));
+      toast('已刪除 ' + d.deleted + ' 筆（已封存到「刪除封存」分頁並下載 XLSX）', 'success');
+      bkResetPreview(); await bkLoad();
+    }catch(e){ toast('未刪除：' + e.message, 'error'); }
+    finally{ btn.disabled = false; }
+  });
+
   document.getElementById('fullExportBtn').addEventListener('click', ()=>{
     if(!state.isAdmin) return;
     if(typeof XLSX === 'undefined'){ toast('XLSX 元件載入失敗，請檢查網路連線', 'error'); return; }
