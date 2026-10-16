@@ -769,7 +769,7 @@
 
 <script>
 (function(){
-  const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, canFullImport: false, canBackup: false, backupPin: '', autoLogoutAt: null, autoLogoutKey: '', editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
+  const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, canFullImport: false, canBackup: false, backupPin: '', baseIds: [], autoLogoutAt: null, autoLogoutKey: '', editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
 
   // ---------- 管理員權限分級 ----------
   // 最高權限：可使用背景/透明度調整、完整匯出匯入、以及編輯或刪除「任何人」登記的資料
@@ -802,6 +802,7 @@
         const data = await res.json();
         if(data.error) throw new Error(data.error);
         state.items = Array.isArray(data.items) ? data.items : [];
+        state.baseIds = state.items.map(it=>it.id);
       }catch(e){
         toast('GAS 雲端讀取失敗，請確認 GAS_URL 是否正確：' + e.message, 'error');
         state.items = seedData();
@@ -815,16 +816,23 @@
     }catch(e){ state.items = seedData(); }
     render();
   }
-  async function saveItems(){
+  async function saveItems(replaceAll){
     if(GAS_URL){
       try{
         const res = await fetch(GAS_URL, {
           method:'POST',
           headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action:'save', sheetName: SHEET_NAME, items: state.items })
+          body: JSON.stringify({ action:'save', sheetName: SHEET_NAME, items: state.items, baseIds: state.baseIds || [], replaceAll: !!replaceAll })
         });
         const data = await res.json();
         if(data.error) throw new Error(data.error);
+        // 後端若發現「別人剛新增、你這個畫面還不知道」的資料，會原樣保留並回傳，這裡補進畫面，避免被蓋掉
+        if(Array.isArray(data.added) && data.added.length){
+          state.items = state.items.concat(data.added);
+          toast('已同步其他人剛新增的 ' + data.added.length + ' 筆資料', 'success');
+          render();
+        }
+        state.baseIds = state.items.map(it=>it.id);
       }catch(e){
         toast('GAS 雲端同步失敗，資料僅保留於本次畫面：' + e.message, 'error');
       }
@@ -2011,7 +2019,7 @@
         pushHistory();
         state.items = importedItems;
         state.selectedIds.clear();
-        saveItems();
+        saveItems(true);
         render();
         toast('已匯入 ' + importedItems.length + ' 筆完整資料', 'success');
       }catch(err){
