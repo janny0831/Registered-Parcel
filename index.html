@@ -267,6 +267,7 @@
   /* ---------- 課長：備份資料 ---------- */
   #backupBtn{background:#F2B84B; color:#3A2200; border-color:transparent; box-shadow:none;}
   #backupBtn:hover{background:#F2B84B; color:#3A2200; opacity:.86; border-color:transparent;}
+  .del-list{font-size:13px; line-height:1.7; margin:8px 0 14px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; word-break:break-all;}
   .bk-modal{max-width:1180px !important;}
   .bk-bar{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px;}
   .bk-bar input, .bk-bar select{background:rgba(var(--paper-tone),.05); border:1px solid var(--line); border-radius:10px; padding:9px 11px; color:var(--fg); font-size:14px; outline:none;}
@@ -710,6 +711,28 @@
   </div>
 </div>
 
+<!-- ===== 刪除確認 ===== -->
+<div class="overlay" id="deleteOverlay">
+  <div class="modal" style="max-width:420px;">
+    <button class="close" data-close>&times;</button>
+    <h2>確定要刪嗎？</h2>
+    <div class="sub">刪除只用於登記錯誤；已送達請改成「已領取」</div>
+    <div class="del-list" id="delList"></div>
+    <div class="field">
+      <label>刪除原因</label>
+      <select id="delReason"><option value="">請選擇</option><option value="登記錯誤">登記錯誤</option><option value="重複登記">重複登記</option><option value="其他">其他</option></select>
+    </div>
+    <div class="field">
+      <label id="delNoteLabel">備註（選「其他」必填）</label>
+      <input type="text" id="delNote" placeholder="例：這筆東西不存在／整批打錯">
+    </div>
+    <div class="modal-actions">
+      <button class="fab ghost" data-close type="button">取消</button>
+      <button class="fab" id="delOk" type="button" style="background:var(--danger);border-color:var(--danger);color:#fff">確定刪除</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== 備份資料（僅課長） ===== -->
 <div class="overlay" id="backupOverlay">
   <div class="modal bk-modal">
@@ -719,6 +742,7 @@
     <div class="bk-bar">
       <input type="search" id="bkSearch" placeholder="搜尋 編號 / 寄件公司 / 收件人 / 登記人…">
       <select id="bkSheet"><option value="">全部據點</option></select>
+      <select id="bkMark"><option value="">全部標註</option><option value="使用中">使用中</option><option value="已刪除">已刪除</option><option value="已移出">已移出（復原上一步）</option><option value="每月歸零移出">每月歸零移出</option><option value="已不在主表">已不在主表（原因不明）</option></select>
       <input type="month" id="bkMonth" title="依入庫月份篩選">
       <button class="fab ghost" id="bkReload" type="button">重新載入</button>
     </div>
@@ -769,13 +793,16 @@
 
 <script>
 (function(){
-  const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, canFullImport: false, canBackup: false, backupPin: '', baseIds: [], autoLogoutAt: null, autoLogoutKey: '', editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
+  const state = { items: [], theme: 'light', device: 'desktop', isAdmin: false, adminName: null, canFullImport: false, canBackup: false, backupPin: '', authPin: '', baseIds: [], autoLogoutAt: null, autoLogoutKey: '', editingId: null, pin: '', pageSize: '10', selectedIds: new Set(), lastFilteredIds: [], lastSelectableIds: [], history: [] };
 
   // ---------- 管理員權限分級 ----------
   // 最高權限：可使用背景/透明度調整、完整匯出匯入、以及編輯或刪除「任何人」登記的資料
   // 部分權限：只能編輯或刪除「自己」登記的資料，看不到最高權限限定的功能按鍵
   const FULL_ADMIN_NAMES = ['小戴', '小編', '晚班', '課長'];
   const PARTIAL_ADMIN_NAMES = ['代班'];
+  // 只有這些姓名可以刪除「已領取」的資料（後端也會用 PIN 再確認一次）
+  const DONE_DELETE_NAMES = ['小編', '課長'];
+  function canDeleteDone(name){ return DONE_DELETE_NAMES.indexOf(name) !== -1; }
   function isFullAdmin(name){ return FULL_ADMIN_NAMES.indexOf(name) !== -1; }
   function isPartialAdmin(name){ return PARTIAL_ADMIN_NAMES.indexOf(name) !== -1; }
   const HISTORY_LIMIT = 20;
@@ -816,16 +843,36 @@
     }catch(e){ state.items = seedData(); }
     render();
   }
-  async function saveItems(replaceAll){
+  // 所有儲存排成一條隊伍、一次只送一個，避免連續操作時先後順序錯亂（會讓刪除紀錄的「動作／原因」對不上）。
+  // opts: { replaceAll, op, reason, note }；回傳 true=雲端已儲存成功，false=失敗（畫面會依情況自動重新同步）
+  let saveChain = Promise.resolve();
+  function saveItems(opts){
+    opts = (opts && typeof opts === 'object') ? opts : { replaceAll: !!opts };
+    const p = saveChain.then(()=>doSaveItems(opts));
+    saveChain = p.catch(()=>{});
+    return p;
+  }
+  function forceRelogin(){
+    state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.canBackup = false;
+    state.backupPin = ''; state.authPin = ''; state.autoLogoutAt = null; state.autoLogoutKey = '';
+    clearAutoLogoutTimer(); saveAdminSession(); updateAdminUI();
+  }
+  async function doSaveItems(opts){
     if(GAS_URL){
       try{
         const res = await fetch(GAS_URL, {
           method:'POST',
           headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action:'save', sheetName: SHEET_NAME, items: state.items, baseIds: state.baseIds || [], replaceAll: !!replaceAll })
+          body: JSON.stringify({
+            action:'save', sheetName: SHEET_NAME, items: state.items, baseIds: state.baseIds || [],
+            replaceAll: !!opts.replaceAll, op: opts.op || '儲存', reason: opts.reason || '', note: opts.note || '',
+            pin: state.authPin || ''
+          })
         });
-        const data = await res.json();
-        if(data.error) throw new Error(data.error);
+        let data;
+        try{ data = await res.json(); }
+        catch(parseErr){ throw new Error('後端暫時無法回應（可能是 Google 服務異常），請稍後再試'); }
+        if(data.error){ const err = new Error(data.error); err.flags = data; throw err; }
         // 後端若發現「別人剛新增、你這個畫面還不知道」的資料，會原樣保留並回傳，這裡補進畫面，避免被蓋掉
         if(Array.isArray(data.added) && data.added.length){
           state.items = state.items.concat(data.added);
@@ -833,13 +880,24 @@
           render();
         }
         state.baseIds = state.items.map(it=>it.id);
+        return true;
       }catch(e){
-        toast('GAS 雲端同步失敗，資料僅保留於本次畫面：' + e.message, 'error');
+        const fl = e.flags || {};
+        if(fl.needLogin){
+          forceRelogin();
+          toast(e.message, 'error');
+        } else if(fl.denied || fl.stale){
+          toast(e.message, 'error');
+          state.history = [];
+          await loadItems();   // 讓畫面回到雲端實際的內容
+        } else {
+          toast('GAS 雲端同步失敗，資料僅保留於本次畫面：' + e.message, 'error');
+        }
+        return false;
       }
-      return;
     }
-    try{ await window.storage.set(STORE_KEY, JSON.stringify(state.items), true); }
-    catch(e){ toast('雲端同步失敗，資料僅保留於本次畫面', 'error'); }
+    try{ await window.storage.set(STORE_KEY, JSON.stringify(state.items), true); return true; }
+    catch(e){ toast('雲端同步失敗，資料僅保留於本次畫面', 'error'); return false; }
   }
   async function verifyAdminPin(pin){
     if(!GAS_URL){ toast('尚未設定 GAS_URL，請先完成後端部署設定', 'error'); return null; }
@@ -878,7 +936,7 @@
     const prev = state.history.pop();
     state.items = JSON.parse(prev);
     state.selectedIds.clear();
-    await saveItems();
+    await saveItems({ op:'復原上一步' });
     render();
     updateUndoBtn();
     toast('已復原上一步操作', 'success');
@@ -942,6 +1000,7 @@
           canFullImport: !!state.canFullImport,
           canBackup: !!state.canBackup,
           backupPin: state.canBackup ? (state.backupPin || '') : '',
+          pin: state.authPin || '',
           logoutAt: state.autoLogoutAt || null,
           durationKey: state.autoLogoutKey || ''
         }));
@@ -952,7 +1011,7 @@
   }
 
   function doAutoLogout(){
-    state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.canBackup = false; state.backupPin = ''; state.autoLogoutAt = null; state.autoLogoutKey = '';
+    state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.canBackup = false; state.backupPin = ''; state.authPin = ''; state.autoLogoutAt = null; state.autoLogoutKey = '';
     clearAutoLogoutTimer();
     saveAdminSession();
     updateAdminUI();
@@ -975,15 +1034,17 @@
       if(!raw) return;
       const data = JSON.parse(raw);
       if(!data || !data.adminName) return;
+      // 舊版登入狀態沒有帶 PIN（無法讓後端確認身份），一律視為未登入，請重新登入一次
+      if(!data.pin){ sessionStorage.removeItem(ADMIN_SESSION_KEY); return; }
       if(data.logoutAt){
         const remaining = data.logoutAt - Date.now();
         if(remaining <= 0){ sessionStorage.removeItem(ADMIN_SESSION_KEY); return; }
-        state.isAdmin = true; state.adminName = data.adminName; state.canFullImport = !!data.canFullImport; state.canBackup = !!data.canBackup; state.backupPin = data.canBackup ? (data.backupPin || '') : '';
+        state.isAdmin = true; state.adminName = data.adminName; state.canFullImport = !!data.canFullImport; state.canBackup = !!data.canBackup; state.backupPin = data.canBackup ? (data.backupPin || '') : ''; state.authPin = data.pin;
         state.autoLogoutAt = data.logoutAt; state.autoLogoutKey = data.durationKey || '';
         clearAutoLogoutTimer();
         autoLogoutTimer = setTimeout(doAutoLogout, remaining);
       } else {
-        state.isAdmin = true; state.adminName = data.adminName; state.canFullImport = !!data.canFullImport; state.canBackup = !!data.canBackup; state.backupPin = data.canBackup ? (data.backupPin || '') : '';
+        state.isAdmin = true; state.adminName = data.adminName; state.canFullImport = !!data.canFullImport; state.canBackup = !!data.canBackup; state.backupPin = data.canBackup ? (data.backupPin || '') : ''; state.authPin = data.pin;
         state.autoLogoutAt = null; state.autoLogoutKey = '';
       }
     }catch(e){}
@@ -1152,7 +1213,7 @@
   loadUiOpacity();
 
   document.getElementById('adminBtn').addEventListener('click', ()=>{
-    if(state.isAdmin){ state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.canBackup = false; state.backupPin = ''; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); updateAdminUI(); toast('已登出管理員模式'); return; }
+    if(state.isAdmin){ state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.canBackup = false; state.backupPin = ''; state.authPin = ''; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); updateAdminUI(); toast('已登出管理員模式'); return; }
     openOverlay('loginOverlay');
   });
   function renderPin(){
@@ -1163,14 +1224,14 @@
     const btn = e.target.closest('button'); if(!btn) return;
     const k = btn.dataset.k;
     if(k === 'back'){ state.pin = state.pin.slice(0,-1); renderPin(); return; }
-    if(k === 'logout'){ state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.canBackup = false; state.backupPin = ''; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); state.pin=''; renderPin(); updateAdminUI(); closeOverlay('loginOverlay'); toast('已登出'); return; }
+    if(k === 'logout'){ state.isAdmin = false; state.adminName = null; state.canFullImport = false; state.canBackup = false; state.backupPin = ''; state.authPin = ''; state.autoLogoutAt = null; state.autoLogoutKey = ''; clearAutoLogoutTimer(); saveAdminSession(); state.pin=''; renderPin(); updateAdminUI(); closeOverlay('loginOverlay'); toast('已登出'); return; }
     if(state.pin.length >= 3) return;
     state.pin += k; renderPin();
     if(state.pin.length === 3){
       setTimeout(async ()=>{
         const matched = await verifyAdminPin(state.pin);
         if(matched){
-          state.isAdmin = true; state.adminName = matched.name; state.canFullImport = !!matched.fullImport; state.canBackup = !!matched.backup; state.backupPin = matched.backup ? state.pin : ''; state.autoLogoutAt = null; state.autoLogoutKey = '';
+          state.isAdmin = true; state.adminName = matched.name; state.canFullImport = !!matched.fullImport; state.canBackup = !!matched.backup; state.backupPin = matched.backup ? state.pin : ''; state.authPin = state.pin; state.autoLogoutAt = null; state.autoLogoutKey = '';
           saveAdminSession();
           closeOverlay('loginOverlay'); updateAdminUI(); toast(matched.name + ' 登入成功', 'success');
         } else {
@@ -1322,16 +1383,8 @@
       const it = state.items.find(x=>x.id===id);
       return it && canFullEdit(it);
     });
-    const count = allowedIds.length;
-    if(count === 0) return;
-    if(!confirm('確定要刪除已選取的 ' + count + ' 筆登記嗎？之後可以用「復原上一步」找回。')) return;
-    pushHistory();
-    const allowedSet = new Set(allowedIds);
-    state.items = state.items.filter(it => !allowedSet.has(it.id));
-    state.selectedIds.clear();
-    await saveItems();
-    render();
-    toast('已刪除 ' + count + ' 筆登記');
+    if(allowedIds.length === 0) return;
+    await deleteItems(allowedIds, true);
   });
 
   function adjustRowsHeight(){
@@ -1754,13 +1807,61 @@
     if(!state.isAdmin) return;
     const it = state.items.find(x=>x.id===id);
     if(!it || !canFullEdit(it)){ toast('您沒有權限刪除此項目', 'error'); return; }
-    if(!confirm('確定要刪除這筆登記嗎？之後可以用「復原上一步」找回。')) return;
+    await deleteItems([id], false);
+  }
+
+  // ---------- 刪除（含確認視窗：原因＋備註；已領取只有小編/課長能刪） ----------
+  let delResolve = null;
+  function askDelete(targets){
+    return new Promise(resolve=>{
+      const hasDone = targets.some(it=>it.status === 'done');
+      const shown = targets.slice(0, 5).map(it=> escapeHtml((it.company||'—') + ' → ' + (it.recipient||'—') + '（' + (it.code||'無編號') + '）')).join('<br>');
+      document.getElementById('delList').innerHTML = shown + (targets.length > 5 ? '<br>…共 ' + targets.length + ' 筆' : (targets.length > 1 ? '<br>共 ' + targets.length + ' 筆' : ''));
+      document.getElementById('delReason').value = '';
+      document.getElementById('delNote').value = '';
+      document.getElementById('delNoteLabel').textContent = hasDone ? '備註（刪除「已領取」必填）' : '備註（選「其他」必填）';
+      delResolve = { resolve: resolve, hasDone: hasDone };
+      openOverlay('deleteOverlay');
+    });
+  }
+  function finishDelete(value){
+    if(!delResolve) return;
+    const r = delResolve; delResolve = null;
+    closeOverlay('deleteOverlay');
+    r.resolve(value);
+  }
+  document.getElementById('delOk').addEventListener('click', ()=>{
+    if(!delResolve) return;
+    const reason = document.getElementById('delReason').value;
+    const note = document.getElementById('delNote').value.trim();
+    if(!reason){ toast('請選擇刪除原因', 'error'); return; }
+    if((reason === '其他' || delResolve.hasDone) && !note){ toast('請填寫備註', 'error'); return; }
+    finishDelete({ reason: reason, note: note });
+  });
+  // 用 X、取消、點背景關閉視窗時，都視為取消刪除
+  new MutationObserver(()=>{
+    if(delResolve && !document.getElementById('deleteOverlay').classList.contains('show')){
+      const r = delResolve; delResolve = null; r.resolve(null);
+    }
+  }).observe(document.getElementById('deleteOverlay'), { attributes:true, attributeFilter:['class'] });
+
+  async function deleteItems(ids, isBulk){
+    const targets = ids.map(id=>state.items.find(x=>x.id===id)).filter(Boolean);
+    if(!targets.length) return;
+    // 只要這批裡面混有「已領取」，而操作者不是小編/課長，整批拒絕（一筆都不刪）
+    if(targets.some(it=>it.status === 'done') && !canDeleteDone(state.adminName)){
+      toast('「已領取」的資料只有' + DONE_DELETE_NAMES.join('、') + '可以刪除，這次沒有刪除任何資料', 'error');
+      return;
+    }
+    const info = await askDelete(targets);
+    if(!info) return;
     pushHistory();
-    state.items = state.items.filter(x=>x.id!==id);
-    state.selectedIds.delete(id);
-    await saveItems();
+    const idSet = new Set(ids);
+    state.items = state.items.filter(it => !idSet.has(it.id));
+    ids.forEach(id=>state.selectedIds.delete(id));
+    const ok = await saveItems({ op: isBulk ? '批次刪除' : '刪除', reason: info.reason, note: info.note });
     render();
-    toast('已刪除登記');
+    if(ok) toast(isBulk ? ('已刪除 ' + targets.length + ' 筆登記') : '已刪除登記');
   }
 
   // ---------- export ----------
@@ -1853,8 +1954,9 @@
   const FULL_FIELD_KEYS = ['id','code','company','recipient','type','region','tempMode','owner','advanceAmount','actualAmount','status','indate','date','time','creator','lastModifiedBy','lastModifiedAt'];
 
   // ---------- 課長：備份資料（唯讀檢視 + 安全刪除） ----------
-  const BK_HEAD = ['備份時間','來源工作表'].concat(FULL_EXPORT_HEADERS);
-  const BK_KEYS = ['備份時間','來源工作表'].concat(FULL_FIELD_KEYS);
+  const BK_MARK = ['主表狀態','移出時間','操作者','原因備註'];
+  const BK_HEAD = ['備份時間','來源工作表'].concat(FULL_EXPORT_HEADERS).concat(BK_MARK);
+  const BK_KEYS = ['備份時間','來源工作表'].concat(FULL_FIELD_KEYS).concat(BK_MARK);
   let bkRows = [], bkPreviewCount = null, bkPreviewParams = null;
   async function bkCall(action, extra){
     const res = await fetch(GAS_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' },
@@ -1870,8 +1972,10 @@
     const q = document.getElementById('bkSearch').value.trim().toLowerCase();
     const sh = document.getElementById('bkSheet').value;
     const mo = document.getElementById('bkMonth').value;
+    const mk = document.getElementById('bkMark').value;
     return bkRows.filter(r=>{
       if(sh && r['來源工作表'] !== sh) return false;
+      if(mk && String(r['主表狀態']||'').indexOf(mk) !== 0) return false;
       if(mo && String(r.indate||'').slice(0,7) !== mo) return false;
       if(q && !BK_KEYS.some(k => String(r[k]||'').toLowerCase().indexOf(q) !== -1)) return false;
       return true;
@@ -1911,7 +2015,7 @@
     if(!(state.isAdmin && state.canBackup)) return;
     bkResetPreview(); openOverlay('backupOverlay'); bkLoad();
   });
-  ['bkSearch','bkSheet','bkMonth'].forEach(id=> document.getElementById(id).addEventListener('input', bkRender));
+  ['bkSearch','bkSheet','bkMonth','bkMark'].forEach(id=> document.getElementById(id).addEventListener('input', bkRender));
   document.getElementById('bkSheet').addEventListener('change', bkResetPreview);
   document.getElementById('bkReload').addEventListener('click', bkLoad);
   document.getElementById('bkDelMonth').addEventListener('change', (e)=>{
@@ -2019,7 +2123,7 @@
         pushHistory();
         state.items = importedItems;
         state.selectedIds.clear();
-        saveItems(true);
+        saveItems({ replaceAll:true, op:'完整匯入' });
         render();
         toast('已匯入 ' + importedItems.length + ' 筆完整資料', 'success');
       }catch(err){
