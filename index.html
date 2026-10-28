@@ -2451,22 +2451,70 @@
       if(kind) aiStatus.classList.add(kind);
     }
 
-    function handleAiFile(file){
-      if(!file.type.startsWith('image/')){
+    // 統一照片規格：依拍攝方向轉正、縮到長邊 2000 像素、轉成標準 JPEG（讓不同手機的照片送給 AI 的格式一致）
+    const AI_MAX_EDGE = 2000;
+    function readAsDataUrl(file){
+      return new Promise((resolve, reject)=>{
+        const fr = new FileReader();
+        fr.onload = ()=> resolve(fr.result);
+        fr.onerror = ()=> reject(new Error('read failed'));
+        fr.readAsDataURL(file);
+      });
+    }
+    async function loadBitmap(file){
+      if(window.createImageBitmap){
+        try{ return await createImageBitmap(file, { imageOrientation: 'from-image' }); }catch(e){ /* 改用 img 備援 */ }
+      }
+      const url = URL.createObjectURL(file);
+      try{
+        const img = await new Promise((resolve, reject)=>{
+          const im = new Image();
+          im.onload = ()=> resolve(im);
+          im.onerror = ()=> reject(new Error('decode failed'));
+          im.src = url;
+        });
+        return img;
+      } finally { setTimeout(()=>URL.revokeObjectURL(url), 5000); }
+    }
+    async function normalizeImage(file){
+      const bmp = await loadBitmap(file);
+      const w0 = bmp.width || bmp.naturalWidth, h0 = bmp.height || bmp.naturalHeight;
+      if(!w0 || !h0) throw new Error('empty image');
+      const scale = Math.min(1, AI_MAX_EDGE / Math.max(w0, h0));
+      const w = Math.round(w0 * scale), h = Math.round(h0 * scale);
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(bmp, 0, 0, w, h);
+      if(bmp.close) try{ bmp.close(); }catch(e){}
+      return cv.toDataURL('image/jpeg', 0.9);
+    }
+
+    async function handleAiFile(file){
+      if(!file.type.startsWith('image/') && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name || '')){
         setAiStatus('請選擇圖片檔案（PNG / JPG / WEBP）。', 'error');
         return;
       }
       setAiStatus('讀取圖片中...', '');
-      const fr = new FileReader();
-      fr.onload = ()=>{
-        const dataUrl = fr.result;
-        aiPreviewImg.src = dataUrl;
-        aiPreviewWrap.style.display = 'block';
-        setAiStatus('AI 辨識中，請稍候...', '');
-        callAiExtract(dataUrl, file.type);
-      };
-      fr.onerror = ()=>{ setAiStatus('無法讀取這個圖片檔案，請換一張圖片再試一次。', 'error'); };
-      fr.readAsDataURL(file);
+      let dataUrl, mediaType;
+      try{
+        dataUrl = await normalizeImage(file);
+        mediaType = 'image/jpeg';
+      }catch(e){
+        // 轉換失敗時退回原圖，不影響原本功能
+        try{
+          dataUrl = await readAsDataUrl(file);
+          mediaType = file.type || 'image/jpeg';
+        }catch(e2){
+          setAiStatus('無法讀取這個圖片檔案，請換一張圖片再試一次。', 'error');
+          return;
+        }
+      }
+      aiPreviewImg.src = dataUrl;
+      aiPreviewWrap.style.display = 'block';
+      setAiStatus('AI 辨識中，請稍候...', '');
+      callAiExtract(dataUrl, mediaType);
     }
 
     async function callAiExtract(dataUrl, mediaType){
@@ -2507,6 +2555,14 @@
         typeSelect.value = data.type;
         typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
         filled.push('類型');
+      }
+      if(data.owner){
+        const ow = document.getElementById('f_owner');
+        if(ow){ ow.value = data.owner; ow.dispatchEvent(new Event('change', { bubbles: true })); filled.push('公司行號'); }
+      }
+      if(data.region){
+        const rg = document.getElementById('f_region');
+        if(rg){ rg.value = data.region; rg.dispatchEvent(new Event('change', { bubbles: true })); }
       }
       if(filled.length === 0){
         setAiStatus('這張照片沒有辨識出可用的資訊，請換一張更清楚的照片再試一次。', 'error');
